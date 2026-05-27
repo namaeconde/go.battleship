@@ -1,213 +1,172 @@
 package game
 
 import (
-	"reflect"
 	"testing"
 )
 
-// TestNewBoard ensures a new board is correctly initialized with Water cells.
 func TestNewBoard(t *testing.T) {
-	board := NewBoard()
-	for r := 0; r < BoardSize; r++ {
-		for c := 0; c < BoardSize; c++ {
-			if board[r][c] != Water {
-				t.Errorf("NewBoard cell (%d,%d) is %v, expected Water", r, c, board[r][c])
+	b := NewBoard()
+	for r := 0; r < 10; r++ {
+		for c := 0; c < 10; c++ {
+			if b.Grid[r][c] != Water {
+				t.Errorf("Expected Water at %d,%d, got %v", r, c, b.Grid[r][c])
 			}
 		}
 	}
 }
 
-// TestPlaceShip_Valid ensures a ship can be placed in a valid position.
-func TestPlaceShip_Valid(t *testing.T) {
-	board := NewBoard()
+func TestPlaceShip(t *testing.T) {
+	b := NewBoard()
 	ship := Ship{
-		Type:        Destroyer,
-		Size:        2,
+		Type:      Destroyer,
+		Size:      2,
 		Orientation: Horizontal,
-		Coordinates: []Coordinate{{Row: 0, Col: 0}, {Row: 0, Col: 1}},
-		Hits:        make([]bool, 2),
+		Coordinates: []Coordinate{{0, 0}, {0, 1}},
 	}
 
-	err := board.PlaceShip(ship)
+	err := b.PlaceShip(ship)
 	if err != nil {
-		t.Fatalf("PlaceShip failed for valid placement: %v", err)
+		t.Errorf("Unexpected error placing ship: %v", err)
 	}
 
-	if board[0][0] != ActiveShip || board[0][1] != ActiveShip {
-		t.Errorf("Ship not placed correctly. Cells are %v, %v, expected Ship", board[0][0], board[0][1])
-	}
-}
-
-// TestPlaceShip_Overlap ensures a ship cannot overlap with another.
-func TestPlaceShip_Overlap(t *testing.T) {
-	board := NewBoard()
-	ship1 := Ship{
-		Type:        Destroyer,
-		Size:        2,
-		Orientation: Horizontal,
-		Coordinates: []Coordinate{{Row: 0, Col: 0}, {Row: 0, Col: 1}},
-		Hits:        make([]bool, 2),
-	}
-	// Place ship1
-	_ = board.PlaceShip(ship1)
-
-	ship2 := Ship{
-		Type:        Destroyer,
-		Size:        2,
-		Orientation: Horizontal,
-		Coordinates: []Coordinate{{Row: 0, Col: 0}, {Row: 0, Col: 1}}, // Overlapping
-		Hits:        make([]bool, 2),
+	if b.Grid[0][0] != StateShip || b.Grid[0][1] != StateShip {
+		t.Errorf("Ship not placed correctly on grid")
 	}
 
-	err := board.PlaceShip(ship2)
+	// Overlap
+	err = b.PlaceShip(ship)
 	if err == nil {
-		t.Fatalf("PlaceShip did not return error for overlapping ship")
-	}
-	if err.Error() != "ship overlap detected" {
-		t.Errorf("Expected 'ship overlap detected' error, got '%v'", err.Error())
-	}
-}
-
-// TestPlaceShip_OutOfBounds ensures a ship cannot be placed out of bounds.
-func TestPlaceShip_OutOfBounds(t *testing.T) {
-	board := NewBoard()
-	ship := Ship{
-		Type:        Destroyer,
-		Size:        2,
-		Orientation: Horizontal,
-		Coordinates: []Coordinate{{Row: 0, Col: 9}, {Row: 0, Col: 10}}, // Out of bounds
-		Hits:        make([]bool, 2),
+		t.Error("Expected error when placing overlapping ship")
 	}
 
-	err := board.PlaceShip(ship)
+	// Out of bounds
+	badShip := Ship{
+		Type: Destroyer,
+		Size: 2,
+		Coordinates: []Coordinate{{9, 9}, {9, 10}},
+	}
+	err = b.PlaceShip(badShip)
 	if err == nil {
-		t.Fatalf("PlaceShip did not return error for out of bounds ship")
-	}
-	if err.Error() != "ship out of bounds" {
-		t.Errorf("Expected 'ship out of bounds' error, got '%v'", err.Error())
+		t.Error("Expected error when placing ship out of bounds")
 	}
 }
 
-// TestApplyShot ensures a shot correctly updates the board and returns result.
 func TestApplyShot(t *testing.T) {
-	board := NewBoard()
+	b := NewBoard()
 	ship := Ship{
-		Type:        Destroyer,
-		Size:        2,
-		Orientation: Horizontal,
-		Coordinates: []Coordinate{{Row: 0, Col: 0}, {Row: 0, Col: 1}},
-		Hits:        make([]bool, 2),
+		Type:      Destroyer,
+		Size:      2,
+		Coordinates: []Coordinate{{0, 0}, {0, 1}},
 	}
-	// Place ship for testing hits
-	_ = board.PlaceShip(ship)
+	_ = b.PlaceShip(ship)
 
-	// Test a hit
-	result, err := board.ApplyShot(Coordinate{Row: 0, Col: 0})
-	if err != nil {
-		t.Fatalf("ApplyShot failed for valid hit: %v", err)
-	}
-	if result != Hit {
-		t.Errorf("Expected Hit, got %v", result)
-	}
-	if board[0][0] != Hit {
-		t.Errorf("Board cell not updated to Hit, got %v", board[0][0])
+	// Hit
+	res, err := b.ApplyShot(Coordinate{0, 0})
+	if err != nil || res != Hit {
+		t.Errorf("Expected Hit, got %v, err: %v", res, err)
 	}
 
-	// Test a miss
-	result, err = board.ApplyShot(Coordinate{Row: 9, Col: 9})
-	if err != nil {
-		t.Fatalf("ApplyShot failed for valid miss: %v", err)
-	}
-	if result != Miss {
-		t.Errorf("Expected Miss, got %v", result)
-	}
-	if board[9][9] != Miss {
-		t.Errorf("Board cell not updated to Miss, got %v", board[9][9])
+	// Miss
+	res, err = b.ApplyShot(Coordinate{1, 1})
+	if err != nil || res != Miss {
+		t.Errorf("Expected Miss, got %v, err: %v", res, err)
 	}
 
-	// Test hitting an already hit cell
-	result, err = board.ApplyShot(Coordinate{Row: 0, Col: 0})
+	// Already shot (Hit)
+	_, err = b.ApplyShot(Coordinate{0, 0})
 	if err == nil {
-		t.Fatalf("ApplyShot did not return error for already targeted cell")
+		t.Error("Expected error when shooting same coordinate twice (Hit)")
 	}
-	if err.Error() != "coordinate already targeted" {
-		t.Errorf("Expected 'coordinate already targeted' error, got '%v'", err.Error())
+
+	// Already shot (Miss)
+	_, err = b.ApplyShot(Coordinate{1, 1})
+	if err == nil {
+		t.Error("Expected error when shooting same coordinate twice (Miss)")
 	}
 }
 
-// TestNewPlayer ensures a new player is correctly initialized.
+func TestUpdateCellsAsSunk(t *testing.T) {
+	b := NewBoard()
+	coords := []Coordinate{{0, 0}, {0, 1}}
+	for _, c := range coords {
+		b.Grid[c.Row][c.Col] = StateShip
+	}
+
+	b.UpdateCellsAsSunk(coords)
+	for _, c := range coords {
+		if b.Grid[c.Row][c.Col] != SunkShip {
+			t.Errorf("Expected SunkShip at %v, got %v", c, b.Grid[c.Row][c.Col])
+		}
+	}
+}
+
 func TestNewPlayer(t *testing.T) {
-	player := NewPlayer("Player1")
-	if player.Name != "Player1" {
-		t.Errorf("Player name expected 'Player1', got '%s'", player.Name)
+	p := NewPlayer("Alice")
+	if p.Name != "Alice" {
+		t.Errorf("Expected Alice, got %s", p.Name)
 	}
-	if len(player.Ships) != len(DefaultShips) {
-		t.Errorf("Expected %d default ships, got %d", len(DefaultShips), len(player.Ships))
-	}
-	if player.ShipsRemaining != len(DefaultShips) {
-		t.Errorf("Expected ShipsRemaining %d, got %d", len(DefaultShips), player.ShipsRemaining)
-	}
-	// Deep equality check for boards (initially empty water)
-	expectedBoard := NewBoard()
-	if !reflect.DeepEqual(player.PlayerBoard, expectedBoard) {
-		t.Errorf("PlayerBoard not initialized correctly")
-	}
-	if !reflect.DeepEqual(player.TrackingBoard, expectedBoard) {
-		t.Errorf("TrackingBoard not initialized correctly")
+	if len(p.Ships) != 5 {
+		t.Errorf("Expected 5 ships, got %d", len(p.Ships))
 	}
 }
 
-// TestMarkShipSunk ensures that sunk ship state is correctly updated.
-func TestMarkShipSunk(t *testing.T) {
-	player := NewPlayer("Player1")
-	// Find a ship to modify, e.g., Destroyer
-	var destroyer *Ship
-	for i := range player.Ships {
-		if player.Ships[i].Type == Destroyer {
-			destroyer = &player.Ships[i]
-			break
-		}
-	}
-	if destroyer == nil {
-		t.Fatalf("Destroyer not found in player ships")
+func TestGetShipByType(t *testing.T) {
+	p := NewPlayer("Alice")
+	ship := p.GetShipByType(Carrier)
+	if ship == nil || ship.Type != Carrier {
+		t.Errorf("Expected Carrier ship")
 	}
 
-	// Simulate placing the ship
-	destroyer.Coordinates = []Coordinate{{Row: 0, Col: 0}, {Row: 0, Col: 1}}
-	_ = player.PlayerBoard.PlaceShip(*destroyer) // Place on board
-
-	// Simulate hits to sink it
-	player.RecordHit(Coordinate{Row: 0, Col: 0})
-	player.RecordHit(Coordinate{Row: 0, Col: 1})
-
-	if player.ShipsRemaining != len(DefaultShips)-1 {
-		t.Errorf("Expected ShipsRemaining %d, got %d after sinking one", len(DefaultShips)-1, player.ShipsRemaining)
-	}
-
-	// Verify cells on PlayerBoard are updated to SunkShip
-	for _, coord := range destroyer.Coordinates {
-		if player.PlayerBoard[coord.Row][coord.Col] != SunkShip {
-			t.Errorf("Ship cell (%d,%d) for sunk Destroyer expected SunkShip, got %v", coord.Row, coord.Col, player.PlayerBoard[coord.Row][coord.Col])
-		}
+	ship = p.GetShipByType(ShipType(-1))
+	if ship != nil {
+		t.Errorf("Expected nil for invalid ship type")
 	}
 }
 
-// TestRemoveShip ensures a ship is correctly removed from the board.
-func TestRemoveShip(t *testing.T) {
-	player := NewPlayer("Player1")
-	ship := player.GetShipByType(Destroyer)
-	if ship == nil {
-		t.Fatalf("Destroyer not found")
-	}
+func TestRecordHit(t *testing.T) {
+	p := NewPlayer("Alice")
+	// Place a ship manually for testing
+	ship := p.GetShipByType(Destroyer)
 	ship.Coordinates = []Coordinate{{0, 0}, {0, 1}}
-	_ = player.PlayerBoard.PlaceShip(*ship)
+	ship.Hits = make([]bool, ship.Size)
+	for _, c := range ship.Coordinates {
+		p.Board.Grid[c.Row][c.Col] = StateShip
+	}
 
-	player.RemoveShip(Destroyer)
+	// First hit
+	state, shipType, err := p.RecordHit(Coordinate{0, 0})
+	if err != nil || state != Hit || shipType != Destroyer {
+		t.Errorf("Expected Hit on Destroyer, got state=%v, shipType=%v, err=%v", state, shipType, err)
+	}
 
-	if player.PlayerBoard[0][0] != Water || player.PlayerBoard[0][1] != Water {
-		t.Errorf("Expected ship cells to be Water, got %v, %v", player.PlayerBoard[0][0], player.PlayerBoard[0][1])
+	// Second hit (sinking)
+	state, shipType, err = p.RecordHit(Coordinate{0, 1})
+	if err != nil || state != SunkShip || shipType != Destroyer {
+		t.Errorf("Expected SunkShip on Destroyer, got state=%v, shipType=%v, err=%v", state, shipType, err)
+	}
+	
+	if p.Board.Grid[0][0] != SunkShip || p.Board.Grid[0][1] != SunkShip {
+		t.Errorf("Board not updated to SunkShip")
+	}
+}
+
+func TestRemoveShip(t *testing.T) {
+	p := NewPlayer("Alice")
+	ship := p.GetShipByType(Destroyer)
+	ship.Coordinates = []Coordinate{{0, 0}, {0, 1}}
+	for _, c := range ship.Coordinates {
+		p.Board.Grid[c.Row][c.Col] = StateShip
+	}
+
+	err := p.RemoveShip(Destroyer)
+	if err != nil {
+		t.Errorf("Unexpected error removing ship: %v", err)
+	}
+
+	if p.Board.Grid[0][0] != Water || p.Board.Grid[0][1] != Water {
+		t.Error("Board not cleared after removing ship")
 	}
 	if len(ship.Coordinates) != 0 {
-		t.Errorf("Ship coordinates not cleared after removal")
+		t.Error("Ship coordinates not cleared")
 	}
 }

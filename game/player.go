@@ -1,105 +1,103 @@
 package game
 
 import (
+	"errors"
 	"fmt"
 )
 
-// PlayerState holds all data for a single player.
+// PlayerState represents the state of a player in the game.
 type PlayerState struct {
-	Name           string
-	PlayerBoard    Board  // Player's own board with their ships
-	TrackingBoard  Board  // Player's view of opponent's board (shots fired)
-	Ships          []Ship // List of ships for this player
-	ShipsRemaining int    // Count of unsunk ships
-	ReadyForBattle bool   // True when all ships are placed
+	Name  string
+	Ships []Ship
+	Board *Board
 }
 
-// NewPlayer creates and initializes a new PlayerState.
+// NewPlayer initializes a player with the default set of ships and a new board.
 func NewPlayer(name string) *PlayerState {
 	ships := make([]Ship, len(DefaultShips))
-	copy(ships, DefaultShips) // Deep copy default ships
-
+	copy(ships, DefaultShips)
+	
+	// Ensure Hits slice is initialized for each ship
 	for i := range ships {
-		ships[i].Hits = make([]bool, ships[i].Size) // Initialize hits slice
+		ships[i].Hits = make([]bool, ships[i].Size)
 	}
 
 	return &PlayerState{
-		Name:           name,
-		PlayerBoard:    NewBoard(),
-		TrackingBoard:  NewBoard(),
-		Ships:          ships,
-		ShipsRemaining: len(ships),
+		Name:  name,
+		Ships: ships,
+		Board: NewBoard(),
 	}
 }
 
-// GetShipByType returns a pointer to a ship of the given type, or nil if not found.
-func (p *PlayerState) GetShipByType(shipType ShipType) *Ship {
+// GetShipByType returns a pointer to the ship of the given type, or nil if not found.
+func (p *PlayerState) GetShipByType(t ShipType) *Ship {
 	for i := range p.Ships {
-		if p.Ships[i].Type == shipType {
+		if p.Ships[i].Type == t {
 			return &p.Ships[i]
 		}
 	}
 	return nil
 }
 
-// RecordHit registers a hit on one of the player's ships.
-// It returns the resulting CellState (Hit/Miss), the type of ship if sunk, and any error.
+// RecordHit updates the state when a coordinate is hit.
+// It checks if a ship was hit, updates its Hits status, and returns if it was sunk.
 func (p *PlayerState) RecordHit(coord Coordinate) (CellState, ShipType, error) {
-	// Apply shot to PlayerBoard
-	cellResult, err := p.PlayerBoard.ApplyShot(coord)
+	// Apply shot to the board
+	state, err := p.Board.ApplyShot(coord)
 	if err != nil {
 		return Water, -1, err
 	}
 
-	if cellResult == Hit {
-		// Find the actual ship that was hit and mark it
-		for i := range p.Ships {
-			ship := &p.Ships[i]
-			for j, shipCoord := range ship.Coordinates {
-				if shipCoord == coord {
-					if !ship.Hits[j] { // Only record if not already hit
-						ship.Hits[j] = true
-					}
+	if state == Miss {
+		return Miss, -1, nil
+	}
 
-					// Check if the ship is sunk
-					isSunk := true
-					for _, hit := range ship.Hits {
-						if !hit {
-							isSunk = false
-							break
-						}
+	// Find which ship was hit
+	for i := range p.Ships {
+		ship := &p.Ships[i]
+		for j, shipCoord := range ship.Coordinates {
+			if shipCoord == coord {
+				ship.Hits[j] = true
+				
+				// Check if sunk
+				isSunk := true
+				for _, h := range ship.Hits {
+					if !h {
+						isSunk = false
+						break
 					}
-					if isSunk {
-						p.PlayerBoard.UpdateCellsAsSunk(ship.Coordinates) // Mark cells as SunkShip
-						p.ShipsRemaining--
-						return SunkShip, ship.Type, nil
-					}
-					return Hit, ship.Type, nil // Return ship type on hit
 				}
+
+				if isSunk {
+					p.Board.UpdateCellsAsSunk(ship.Coordinates)
+					return SunkShip, ship.Type, nil
+				}
+				return Hit, ship.Type, nil
 			}
 		}
 	}
-	return cellResult, -1, nil // Return result, no ship sunk for misses
+
+	// This should not be reachable if Board.ApplyShot returned Hit
+	return Hit, -1, fmt.Errorf("ship not found at coordinate %v", coord)
 }
 
-// RemoveShip removes a ship from a player's board (for re-placement).
-func (p *PlayerState) RemoveShip(shipType ShipType) error {
-	ship := p.GetShipByType(shipType)
+// RemoveShip clears a ship's coordinates from the board and the ship's own state.
+func (p *PlayerState) RemoveShip(t ShipType) error {
+	ship := p.GetShipByType(t)
 	if ship == nil {
-		return fmt.Errorf("ship type %v not found", shipType)
-	}
-	if len(ship.Coordinates) == 0 {
-		return fmt.Errorf("ship %v not placed", shipType)
+		return errors.New("ship type not found")
 	}
 
-	// Clear cells on the board
+	// Clear coordinates from board
 	for _, coord := range ship.Coordinates {
-		if IsValidCoordinate(coord) { // Defensive check
-			p.PlayerBoard[coord.Row][coord.Col] = Water
+		if coord.Row >= 0 && coord.Row < 10 && coord.Col >= 0 && coord.Col < 10 {
+			p.Board.Grid[coord.Row][coord.Col] = Water
 		}
 	}
-	ship.Coordinates = nil              // Clear coordinates
-	ship.Hits = make([]bool, ship.Size) // Reset hits
-	p.ReadyForBattle = false            // Player is no longer ready if a ship is removed
+
+	// Clear coordinates from ship
+	ship.Coordinates = nil
+	ship.Hits = make([]bool, ship.Size)
+
 	return nil
 }

@@ -4,72 +4,63 @@ import (
 	"errors"
 )
 
-const BoardSize = 10
-
-// Board represents a 10x10 game board.
-type Board [BoardSize][BoardSize]CellState
-
-// NewBoard creates and returns a new 10x10 board initialized with Water cells.
-func NewBoard() Board {
-	board := Board{}
-	for r := 0; r < BoardSize; r++ {
-		for c := 0; c < BoardSize; c++ {
-			board[r][c] = Water
-		}
-	}
-	return board
+// Board represents the 10x10 game board.
+type Board struct {
+	Grid [10][10]CellState
 }
 
-// IsValidCoordinate checks if a coordinate is within board boundaries.
-func IsValidCoordinate(coord Coordinate) bool {
-	return coord.Row >= 0 && coord.Row < BoardSize &&
-		coord.Col >= 0 && coord.Col < BoardSize
+// NewBoard returns an initialized 10x10 grid with all cells set to Water.
+func NewBoard() *Board {
+	return &Board{}
 }
 
-// PlaceShip attempts to place a ship on the board.
-// It returns an error if the placement is invalid (out of bounds, overlaps, etc.).
+// PlaceShip validates and places a ship on the board.
 func (b *Board) PlaceShip(ship Ship) error {
-	// Validate placement
+	// Check if all coordinates are within bounds and not occupied
 	for _, coord := range ship.Coordinates {
-		if !IsValidCoordinate(coord) {
-			return errors.New("ship out of bounds")
+		if coord.Row < 0 || coord.Row >= 10 || coord.Col < 0 || coord.Col >= 10 {
+			return errors.New("ship coordinate out of bounds")
 		}
-		if b[coord.Row][coord.Col] != Water {
-			return errors.New("ship overlap detected")
+		if b.Grid[coord.Row][coord.Col] != Water {
+			return errors.New("ship coordinate already occupied")
 		}
 	}
 
 	// Place the ship
 	for _, coord := range ship.Coordinates {
-		b[coord.Row][coord.Col] = ActiveShip
+		b.Grid[coord.Row][coord.Col] = StateShip
 	}
+
 	return nil
 }
 
-// ApplyShot processes a shot at a given coordinate and returns the result and the type of ship hit (if any).
+// ApplyShot processes a shot result at the given coordinate.
+// Returns Hit, Miss, or an error if the shot is invalid (out of bounds or already shot).
 func (b *Board) ApplyShot(coord Coordinate) (CellState, error) {
-	if !IsValidCoordinate(coord) {
-		return Water, errors.New("shot out of bounds")
+	if coord.Row < 0 || coord.Row >= 10 || coord.Col < 0 || coord.Col >= 10 {
+		return Water, errors.New("coordinate out of bounds")
 	}
 
-	switch b[coord.Row][coord.Col] {
-	case Hit, Miss, SunkShip:
-		return Water, errors.New("coordinate already targeted")
+	state := b.Grid[coord.Row][coord.Col]
+	switch state {
 	case Water:
-		b[coord.Row][coord.Col] = Miss
+		b.Grid[coord.Row][coord.Col] = Miss
 		return Miss, nil
-	case ActiveShip:
-		b[coord.Row][coord.Col] = Hit
+	case StateShip:
+		b.Grid[coord.Row][coord.Col] = Hit
 		return Hit, nil
+	case Hit, Miss, SunkShip:
+		return state, errors.New("coordinate already shot")
+	default:
+		return Water, errors.New("unknown cell state")
 	}
-	return Water, nil
 }
 
-// UpdateCellsAsSunk marks all cells of a specific ship type as SunkShip.
-func (b *Board) UpdateCellsAsSunk(shipCoords []Coordinate) {
-	for _, coord := range shipCoords {
-		if IsValidCoordinate(coord) {
-			b[coord.Row][coord.Col] = SunkShip
+// UpdateCellsAsSunk marks the given coordinates as SunkShip.
+func (b *Board) UpdateCellsAsSunk(coords []Coordinate) {
+	for _, coord := range coords {
+		if coord.Row >= 0 && coord.Row < 10 && coord.Col >= 0 && coord.Col < 10 {
+			b.Grid[coord.Row][coord.Col] = SunkShip
 		}
 	}
 }
