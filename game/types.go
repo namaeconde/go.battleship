@@ -1,13 +1,18 @@
 package game
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 // CellState represents the state of a single cell on the game board.
 type CellState int
 
 const (
 	Water CellState = iota
-	Ship
+	StateShip
 	Hit
 	Miss
 	SunkShip
@@ -71,7 +76,7 @@ func (cs CellState) String() string {
 	switch cs {
 	case Water:
 		return "Water"
-	case Ship:
+	case StateShip:
 		return "Ship"
 	case Hit:
 		return "Hit"
@@ -104,8 +109,75 @@ func (st ShipType) String() string {
 
 // String returns the string representation of an Orientation.
 func (o Orientation) String() string {
-	if o == Horizontal {
+	switch o {
+	case Horizontal:
 		return "Horizontal"
+	case Vertical:
+		return "Vertical"
+	default:
+		return "Unknown"
 	}
-	return "Vertical"
+}
+
+// String returns the string representation of a GamePhase.
+func (gp GamePhase) String() string {
+	switch gp {
+	case PhaseConnection:
+		return "Connection"
+	case PhasePlacement:
+		return "Placement"
+	case PhaseBattle:
+		return "Battle"
+	case PhaseGameOver:
+		return "GameOver"
+	default:
+		return "Unknown"
+	}
+}
+
+// String returns the string representation of a Coordinate (e.g., "A1").
+func (c Coordinate) String() string {
+	return fmt.Sprintf("%c%d", 'A'+c.Col, c.Row+1)
+}
+
+// ParseCoordinate parses a string like "A1" into a Coordinate.
+// Returns an error if the input is invalid or out of bounds (A-J, 1-10).
+func ParseCoordinate(s string) (Coordinate, error) {
+	if len(s) < 2 || len(s) > 3 {
+		return Coordinate{}, errors.New("invalid coordinate format")
+	}
+
+	colChar := strings.ToUpper(string(s[0]))[0]
+	if colChar < 'A' || colChar > 'J' {
+		return Coordinate{}, errors.New("column out of bounds (A-J)")
+	}
+
+	rowVal, err := strconv.Atoi(s[1:])
+	if err != nil || rowVal < 1 || rowVal > 10 {
+		return Coordinate{}, errors.New("row out of bounds (1-10)")
+	}
+
+	return Coordinate{
+		Row: rowVal - 1,
+		Col: int(colChar - 'A'),
+	}, nil
+}
+
+// ParseShipType parses a string into a ShipType.
+// Returns -1 if the string does not match any known ShipType.
+func ParseShipType(s string) ShipType {
+	switch strings.ToLower(s) {
+	case "carrier":
+		return Carrier
+	case "battleship":
+		return Battleship
+	case "cruiser":
+		return Cruiser
+	case "submarine":
+		return Submarine
+	case "destroyer":
+		return Destroyer
+	default:
+		return -1
+	}
 }
