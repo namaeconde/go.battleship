@@ -1,11 +1,13 @@
 package game
 
+import "fmt"
+
 // CellState represents the state of a single cell on the game board.
 type CellState int
 
 const (
 	Water CellState = iota
-	ActiveShip
+	Ship
 	Hit
 	Miss
 	SunkShip
@@ -15,11 +17,11 @@ const (
 type ShipType int
 
 const (
-	Carrier    ShipType = iota // Size 5
-	Battleship                 // Size 4
-	Cruiser                    // Size 3
-	Submarine                  // Size 3
-	Destroyer                  // Size 2
+	Carrier ShipType = iota // Size 5
+	Battleship              // Size 4
+	Cruiser                 // Size 3
+	Submarine               // Size 3
+	Destroyer               // Size 2
 )
 
 // Ship represents a single ship with its properties.
@@ -69,8 +71,8 @@ func (cs CellState) String() string {
 	switch cs {
 	case Water:
 		return "Water"
-	case ActiveShip:
-		return "ActiveShip"
+	case Ship:
+		return "Ship"
 	case Hit:
 		return "Hit"
 	case Miss:
