@@ -82,6 +82,10 @@ func main() {
 	// Start the game loop (which will now draw the UI)
 	go gs.StartGameLoop()
 
+	// Placement state
+	currentShip := gs.LocalPlayer.GetShipByType(game.Carrier)
+	currentOrientation := game.Horizontal
+
 	quit := make(chan struct{})
 	go func() {
 		for {
@@ -104,14 +108,38 @@ func main() {
 					gameUI.Cursor.Col++
 				case tcell.KeyEnter:
 					if gs.Phase == game.PhasePlacement {
-						gs.SetReady()
+						if currentShip != nil {
+							coords := []game.Coordinate{}
+							for i := 0; i < currentShip.Size; i++ {
+								if currentOrientation == game.Horizontal {
+									coords = append(coords, game.Coordinate{Row: gameUI.Cursor.Row, Col: gameUI.Cursor.Col + i})
+								} else {
+									coords = append(coords, game.Coordinate{Row: gameUI.Cursor.Row + i, Col: gameUI.Cursor.Col})
+								}
+							}
+							err := gs.PlaceShip(currentShip.Type, coords, currentOrientation)
+							if err != nil {
+								gameUI.SetMessage(fmt.Sprintf("Error: %v", err))
+							} else {
+								gameUI.SetMessage("Ship placed!")
+							}
+						} else {
+							gs.SetReady()
+						}
 					}
-				}
-				if ev.Key() == tcell.KeyRune && ev.Rune() == ' ' {
-					if gs.Phase == game.PhasePlacement {
-						// Simple unplace logic: remove ship at cursor (requires implementation)
-						gs.UI.SetMessage("Spacebar: Unplace ship (not fully implemented)")
-						gs.UI.Draw(gs, nil, game.Horizontal)
+				case tcell.KeyRune:
+					if ev.Rune() == ' ' && gs.Phase == game.PhasePlacement {
+						// Remove ship at cursor
+						// This needs logic to identify the ship at the cursor
+						// Assuming currentShip for simplicity
+						if currentShip != nil {
+							err := gs.RemoveShip(currentShip.Type)
+							if err != nil {
+								gameUI.SetMessage(fmt.Sprintf("Error: %v", err))
+							} else {
+								gameUI.SetMessage("Ship removed!")
+							}
+						}
 					}
 				}
 				// Keep cursor within bounds
@@ -120,10 +148,10 @@ func main() {
 				if gameUI.Cursor.Col < 0 { gameUI.Cursor.Col = 0 }
 				if gameUI.Cursor.Col >= 10 { gameUI.Cursor.Col = 10 - 1 }
 				
-				gs.UI.Draw(gs, nil, game.Horizontal)
+				gameUI.Draw(gs, currentShip, currentOrientation)
 			case *tcell.EventResize:
 				s.Sync()
-				gs.UI.Draw(gs, nil, game.Horizontal)
+				gameUI.Draw(gs, currentShip, currentOrientation)
 			}
 		}
 	}()
