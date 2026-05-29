@@ -10,8 +10,18 @@ A 2-player networked terminal-based Battleship game implemented in Go.
 
 ## How to Run
 
-(Instructions will be added here as development progresses)
+### Host
+```bash
+go run . host -p 8080
+```
 
-## Design Document
+### Join
+```bash
+go run . join -a 127.0.0.1:8080
+```
 
-See `design.md` for the full design specification.
+## Gameplay Instructions
+
+1.  **Placement Phase**: Use arrow keys to navigate and place ships. Press `Enter` to place/set ready, `Spacebar` to remove a ship.
+2.  **Battle Phase**: Use arrow keys to navigate the tracking board (right side). Press `Spacebar` to confirm a target (highlighted in orange), then `Enter` to fire. The host always fires first; players alternate turns.
+3.  **Exit**: Press `Esc` or `Ctrl+C` at any time to exit.
