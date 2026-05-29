@@ -7,9 +7,10 @@ import (
 
 // PlayerState represents the state of a player in the game.
 type PlayerState struct {
-	Name  string
-	Ships []Ship
-	Board *Board
+	Name    string
+	Ships   []Ship
+	Board   *Board
+	IsReady bool
 }
 
 // NewPlayer initializes a player with the default set of ships and a new board.

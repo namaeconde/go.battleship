@@ -152,6 +152,40 @@ func (gs *GameState) networkWriter() {
 	}
 }
 
+// PlaceShip places a ship on the local board.
+func (gs *GameState) PlaceShip(t ShipType, coords []Coordinate, orientation Orientation) error {
+	ship := gs.LocalPlayer.GetShipByType(t)
+	if ship == nil {
+		return fmt.Errorf("ship %v not found", t)
+	}
+	ship.Coordinates = coords
+	ship.Orientation = orientation
+	err := gs.LocalPlayer.Board.PlaceShip(*ship)
+	if err != nil {
+		ship.Coordinates = nil // Reset
+		return err
+	}
+	return nil
+}
+
+// RemoveShip removes a ship from the local board.
+func (gs *GameState) RemoveShip(t ShipType) error {
+	return gs.LocalPlayer.RemoveShip(t)
+}
+
+// SetReady marks the local player as ready and sends a message to the opponent.
+func (gs *GameState) SetReady() {
+	gs.LocalPlayer.IsReady = true
+	gs.SendMessage(network.CmdPlacementDone)
+	
+	if gs.RemotePlayer.IsReady {
+		gs.TransitionPhase(PhaseBattle)
+	} else {
+		gs.UI.SetMessage("Waiting for opponent...")
+		gs.UI.Draw(gs, nil, Horizontal)
+	}
+}
+
 // handleIncomingMessage processes a received network message.
 func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 	gs.UI.SetMessage(fmt.Sprintf("Received: %v %v", msg.Command, msg.Args))
@@ -169,6 +203,14 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 		if gs.LocalPlayer.Name == "Joiner" {
 			gs.TransitionPhase(PhasePlacement)
 			gs.UI.SetMessage("Connected to host. Ready for ship placement. Press Enter when done.")
+			gs.UI.Draw(gs, nil, Horizontal)
+		}
+	case network.CmdPlacementDone:
+		gs.RemotePlayer.IsReady = true
+		if gs.LocalPlayer.IsReady {
+			gs.TransitionPhase(PhaseBattle)
+		} else {
+			gs.UI.SetMessage("Opponent is ready.")
 			gs.UI.Draw(gs, nil, Horizontal)
 		}
 	case network.CmdQuit:

@@ -102,6 +102,17 @@ func main() {
 					gameUI.Cursor.Col--
 				case tcell.KeyRight:
 					gameUI.Cursor.Col++
+				case tcell.KeyEnter:
+					if gs.Phase == game.PhasePlacement {
+						gs.SetReady()
+					}
+				}
+				if ev.Key() == tcell.KeyRune && ev.Rune() == ' ' {
+					if gs.Phase == game.PhasePlacement {
+						// Simple unplace logic: remove ship at cursor (requires implementation)
+						gs.UI.SetMessage("Spacebar: Unplace ship (not fully implemented)")
+						gs.UI.Draw(gs, nil, game.Horizontal)
+					}
 				}
 				// Keep cursor within bounds
 				if gameUI.Cursor.Row < 0 { gameUI.Cursor.Row = 0 }
