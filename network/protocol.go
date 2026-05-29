@@ -15,6 +15,7 @@ const (
 	CmdShot           Command = "SHOT"
 	CmdShotResult     Command = "SHOT_RESULT"
 	CmdQuit           Command = "QUIT"
+	CmdReplayRequest  Command = "REPLAY_REQUEST"
 )
 
 type Message struct {

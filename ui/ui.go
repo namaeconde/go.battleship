@@ -2,8 +2,6 @@
 package ui
 
 import (
-	"strings"
-
 	"github.com/gdamore/tcell/v2"
 	"go.battleship/game"
 )
@@ -34,17 +32,7 @@ func NewUI(s tcell.Screen) *UI {
 // Draw updates the entire screen based on the current game state.
 func (u *UI) Draw(gs *game.GameState, currentShip *game.Ship, currentOrientation game.Orientation) {
 	if gs.Phase == game.PhaseGameOver {
-		// Determine winner based on message for now
-		winnerName := "Unknown Player"
-		if strings.Contains(u.Message, "You win") {
-			winnerName = gs.LocalPlayer.Name
-		} else if strings.Contains(u.Message, "wins!") {
-			parts := strings.Split(u.Message, " ")
-			if len(parts) > 1 {
-				winnerName = parts[0]
-			}
-		}
-		drawGameOverScreen(u.screen, winnerName)
+		drawGameOverScreen(u.screen, gs.Winner, gs.LocalPlayer.Name)
 		return
 	}
 

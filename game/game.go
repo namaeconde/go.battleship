@@ -29,12 +29,15 @@ type GameState struct {
 	UI           UIInterface // Reference to the UI
 
 	// Channels for network communication
-	incomingMsgs chan *network.Message
-	outgoingMsgs chan network.Message
-	LastShot     *Coordinate
-	CancelCtx    context.Context    // Context for cancellation of goroutines
-	CancelFunc   context.CancelFunc // Function to cancel context
-	wg           sync.WaitGroup     // WaitGroup for goroutines
+	incomingMsgs        chan *network.Message
+	outgoingMsgs        chan network.Message
+	LastShot            *Coordinate
+	Winner              string             // Name of the winning player
+	WaitingReplay       bool               // True if this player requested a replay
+	OpponentWantsReplay bool               // True if the opponent requested a replay
+	CancelCtx           context.Context    // Context for cancellation of goroutines
+	CancelFunc          context.CancelFunc // Function to cancel context
+	wg                  sync.WaitGroup     // WaitGroup for goroutines
 }
 
 // NewGame initializes a new GameState with two players.
@@ -212,6 +215,38 @@ func (gs *GameState) SetReady() {
 	}
 }
 
+// RequestReplay sends a replay request to the opponent.
+// If the opponent has already requested one, the game resets immediately.
+func (gs *GameState) RequestReplay() {
+	if gs.Phase != PhaseGameOver {
+		return
+	}
+	gs.WaitingReplay = true
+	gs.SendMessage(network.CmdReplayRequest)
+	if gs.OpponentWantsReplay {
+		gs.doReset()
+	} else {
+		gs.UI.SetMessage("Replay requested. Waiting for opponent to agree...")
+		gs.UI.Draw(gs, nil, Horizontal)
+	}
+}
+
+// doReset resets game state for a new game while keeping the network connection open.
+func (gs *GameState) doReset() {
+	localName := gs.LocalPlayer.Name
+	remoteName := gs.RemotePlayer.Name
+	gs.LocalPlayer = NewPlayer(localName)
+	gs.RemotePlayer = NewPlayer(remoteName)
+	gs.Phase = PhasePlacement
+	gs.TurnOwner = ""
+	gs.LastShot = nil
+	gs.Winner = ""
+	gs.WaitingReplay = false
+	gs.OpponentWantsReplay = false
+	gs.UI.SetMessage("New game! Place your ships.")
+	gs.UI.Draw(gs, nil, Horizontal)
+}
+
 // handleIncomingMessage processes a received network message.
 func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 	gs.UI.SetMessage(fmt.Sprintf("Received: %v %v", msg.Command, msg.Args))
@@ -274,6 +309,12 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 			args = append(args, "shipType", shipType.String())
 		}
 		gs.SendMessage(network.CmdShotResult, args...)
+		// Detect if all local ships are sunk (we lost)
+		if result == "sunk" && gs.LocalPlayer.ShipsRemaining == 0 {
+			gs.Winner = gs.RemotePlayer.Name
+			gs.TransitionPhase(PhaseGameOver)
+			return
+		}
 		// Opponent just fired — now it is the local player's turn
 		gs.TurnOwner = gs.LocalPlayer.Name
 		gs.UI.SetMessage(fmt.Sprintf("Your turn! Opponent fired at %s (%s). Fire back.", coordStr, result))
@@ -298,8 +339,8 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 			gs.RemotePlayer.TrackingBoard.Grid[coord.Row][coord.Col] = SunkShip
 			gs.RemotePlayer.ShipsRemaining--
 			if gs.RemotePlayer.ShipsRemaining <= 0 {
+				gs.Winner = gs.LocalPlayer.Name
 				gs.TransitionPhase(PhaseGameOver)
-				gs.UI.SetMessage("You win! All opponent ships sunk!")
 				gs.UI.Draw(gs, nil, Horizontal)
 				return
 			}
@@ -308,6 +349,17 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 		// Local player just received their shot result — now it is opponent's turn
 		gs.TurnOwner = gs.RemotePlayer.Name
 		gs.UI.Draw(gs, nil, Horizontal)
+	case network.CmdReplayRequest:
+		if gs.Phase != PhaseGameOver {
+			return
+		}
+		gs.OpponentWantsReplay = true
+		if gs.WaitingReplay {
+			gs.doReset()
+		} else {
+			gs.UI.SetMessage("Opponent wants to replay! Press R to agree or Q to quit.")
+			gs.UI.Draw(gs, nil, Horizontal)
+		}
 	case network.CmdQuit:
 		gs.UI.SetMessage("Opponent quit the game.")
 		gs.UI.Draw(gs, nil, Horizontal)

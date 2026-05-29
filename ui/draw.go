@@ -136,30 +136,39 @@ func drawMessage(s tcell.Screen, msg string) {
 	}
 }
 
-// drawGameOverScreen draws a full-screen game over message.
-func drawGameOverScreen(s tcell.Screen, winner string) {
+// drawGameOverScreen draws a full-screen game over message with replay/quit options.
+func drawGameOverScreen(s tcell.Screen, winner string, localPlayerName string) {
 	s.Clear()
 	style := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
 	winnerStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow).Background(tcell.ColorBlack).Bold(true)
+	winStyle := tcell.StyleDefault.Foreground(tcell.ColorGreen).Background(tcell.ColorBlack).Bold(true)
+	loseStyle := tcell.StyleDefault.Foreground(tcell.ColorRed).Background(tcell.ColorBlack).Bold(true)
 
 	width, height := s.Size()
 	gameOverText := "GAME OVER"
 	winnerText := fmt.Sprintf("%s WINS!", winner)
-	exitText := "Press ESC or Ctrl+C to exit."
+	var outcomeText string
+	var outcomeStyle tcell.Style
+	if winner == localPlayerName {
+		outcomeText = "YOU WIN!"
+		outcomeStyle = winStyle
+	} else {
+		outcomeText = "YOU LOSE!"
+		outcomeStyle = loseStyle
+	}
+	replayText := "Press R to play again  |  Press Q to quit"
 
-	// Draw Game Over
 	for i, r := range gameOverText {
-		s.SetContent((width-len(gameOverText))/2+i, height/2-2, r, nil, style)
+		s.SetContent((width-len(gameOverText))/2+i, height/2-3, r, nil, style)
 	}
-
-	// Draw Winner
 	for i, r := range winnerText {
-		s.SetContent((width-len(winnerText))/2+i, height/2, r, nil, winnerStyle)
+		s.SetContent((width-len(winnerText))/2+i, height/2-1, r, nil, winnerStyle)
 	}
-
-	// Draw Exit instructions
-	for i, r := range exitText {
-		s.SetContent((width-len(exitText))/2+i, height/2+2, r, nil, style)
+	for i, r := range outcomeText {
+		s.SetContent((width-len(outcomeText))/2+i, height/2+1, r, nil, outcomeStyle)
+	}
+	for i, r := range replayText {
+		s.SetContent((width-len(replayText))/2+i, height/2+3, r, nil, style)
 	}
 	s.Show()
 }

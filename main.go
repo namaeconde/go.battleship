@@ -85,6 +85,7 @@ func main() {
 	// Placement state
 	currentShip := gs.LocalPlayer.GetShipByType(game.Carrier)
 	currentOrientation := game.Horizontal
+	lastPhase := gs.Phase // track phase changes to detect game reset
 
 	quit := make(chan struct{})
 	go func() {
@@ -173,6 +174,12 @@ func main() {
 						target := game.Coordinate{Row: gameUI.Cursor.Row, Col: gameUI.Cursor.Col}
 						gameUI.TargetCoord = &target
 						gameUI.SetMessage(fmt.Sprintf("Targeting %s — press Enter to fire.", target.String()))
+					case (ev.Rune() == 'r' || ev.Rune() == 'R') && gs.Phase == game.PhaseGameOver:
+						gs.RequestReplay()
+					case (ev.Rune() == 'q' || ev.Rune() == 'Q') && gs.Phase == game.PhaseGameOver:
+						gs.SendMessage(network.CmdQuit)
+						close(quit)
+						return
 					}
 				}
 				// Keep cursor within bounds
@@ -189,6 +196,13 @@ func main() {
 					gameUI.Cursor.Col = 10 - 1
 				}
 
+				// Reset placement state when a replay starts after game over
+				if lastPhase == game.PhaseGameOver && gs.Phase == game.PhasePlacement {
+					currentShip = gs.LocalPlayer.GetShipByType(game.Carrier)
+					currentOrientation = game.Horizontal
+					gameUI.TargetCoord = nil
+				}
+				lastPhase = gs.Phase
 				gameUI.Draw(gs, currentShip, currentOrientation)
 			case *tcell.EventResize:
 				s.Sync()
