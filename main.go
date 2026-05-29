@@ -52,7 +52,7 @@ func main() {
 	if appConfig.IsHost {
 		gameUI.SetMessage(fmt.Sprintf("Hosting on port %s. Waiting for opponent...", appConfig.Port))
 		gameUI.Draw(gs, nil, game.Horizontal)
-		conn, err = network.StartHost(gs.CancelCtx, appConfig.Port) // Use game's context
+		conn, err = network.StartHost(gs.CancelCtx, appConfig.Port, nil) // Use game's context
 	} else {
 		gameUI.SetMessage(fmt.Sprintf("Connecting to %s...", appConfig.RemoteAddress))
 		gameUI.Draw(gs, nil, game.Horizontal)

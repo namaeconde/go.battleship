@@ -30,7 +30,7 @@ type GameState struct {
 
 	// Channels for network communication
 	incomingMsgs chan *network.Message
-	outgoingMsgs chan string
+	outgoingMsgs chan network.Message
 	CancelCtx    context.Context    // Context for cancellation of goroutines
 	CancelFunc   context.CancelFunc // Function to cancel context
 	wg           sync.WaitGroup     // WaitGroup for goroutines
@@ -45,7 +45,7 @@ func NewGame(localPlayerName, remotePlayerName string, gameUI UIInterface) *Game
 		Phase:        PhaseConnection, // Start in connection phase
 		UI:           gameUI,
 		incomingMsgs: make(chan *network.Message, 100), // Buffered channel
-		outgoingMsgs: make(chan string, 100),
+		outgoingMsgs: make(chan network.Message, 100),
 		CancelCtx:    ctx,
 		CancelFunc:   cancel,
 	}
@@ -112,7 +112,7 @@ func (gs *GameState) networkReader() {
 			fmt.Println("networkReader: Shutting down.")
 			return
 		default:
-			msgStr, err := network.ReadMessage(gs.Connection)
+			msg, err := network.Receive(gs.Connection)
 			if err != nil {
 				if err.Error() == "EOF" || strings.Contains(err.Error(), "use of closed network connection") {
 					gs.UI.SetMessage("Opponent disconnected.")
@@ -123,13 +123,7 @@ func (gs *GameState) networkReader() {
 				gs.CancelFunc() // Signal game loop to stop on network error
 				return
 			}
-			parsedMsg, err := network.ParseMessage(msgStr)
-			if err != nil {
-				gs.UI.SetMessage(fmt.Sprintf("Failed to parse message: %v", err))
-				gs.UI.Draw(gs, nil, Horizontal)
-				continue
-			}
-			gs.incomingMsgs <- parsedMsg
+			gs.incomingMsgs <- msg
 		}
 	}
 }
@@ -147,7 +141,7 @@ func (gs *GameState) networkWriter() {
 			fmt.Println("networkWriter: Shutting down.")
 			return
 		case msg := <-gs.outgoingMsgs:
-			err := network.WriteMessage(gs.Connection, msg)
+			err := network.Send(gs.Connection, msg)
 			if err != nil {
 				gs.UI.SetMessage(fmt.Sprintf("Network write error: %v", err))
 				gs.UI.Draw(gs, nil, Horizontal)
@@ -189,7 +183,13 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 
 // SendMessage adds a message to the outgoing queue.
 func (gs *GameState) SendMessage(cmd network.Command, args ...string) {
-	msg := network.CreateMessage(cmd, args...)
+	argMap := make(map[string]string)
+	for i := 0; i < len(args); i += 2 {
+		if i+1 < len(args) {
+			argMap[args[i]] = args[i+1]
+		}
+	}
+	msg := network.Message{Command: cmd, Args: argMap}
 	select {
 	case gs.outgoingMsgs <- msg:
 		// Message sent to queue

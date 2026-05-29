@@ -8,17 +8,18 @@ import (
 )
 
 func TestNetworkConnection(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	port := ":9000"
+	port := ":0"
 	
 	// Try to start host
 	connChan := make(chan net.Conn)
 	errChan := make(chan error)
+	addrChan := make(chan string)
 
 	go func() {
-		conn, err := StartHost(ctx, port)
+		conn, err := StartHost(ctx, port, addrChan)
 		if err != nil {
 			errChan <- err
 			return
@@ -26,8 +27,19 @@ func TestNetworkConnection(t *testing.T) {
 		connChan <- conn
 	}()
 
+	// Wait for the host to be ready and get the address
+	var hostAddr string
+	select {
+	case hostAddr = <-addrChan:
+		// OK
+	case err := <-errChan:
+		t.Fatalf("Failed to start host: %v", err)
+	case <-ctx.Done():
+		t.Fatal("Timeout waiting for host address")
+	}
+
 	// Try to connect to host
-	conn, err := ConnectToHost(ctx, "localhost"+port)
+	conn, err := ConnectToHost(ctx, hostAddr)
 	if err != nil {
 		t.Fatalf("Failed to connect to host: %v", err)
 	}

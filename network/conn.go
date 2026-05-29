@@ -5,13 +5,17 @@ import (
 	"net"
 )
 
-func StartHost(ctx context.Context, port string) (net.Conn, error) {
+func StartHost(ctx context.Context, port string, addrChan chan<- string) (net.Conn, error) {
 	lc := net.ListenConfig{}
 	ln, err := lc.Listen(ctx, "tcp", port)
 	if err != nil {
 		return nil, err
 	}
 	defer ln.Close()
+
+	if addrChan != nil {
+		addrChan <- ln.Addr().String()
+	}
 
 	// Wait for connection
 	type res struct {

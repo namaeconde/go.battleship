@@ -6,8 +6,8 @@
 - [x] Task 3: Implement Board and Player Structures
 - [x] Task 4: Implement Main Game State and Game Loop
 - [x] Task 5: Implement Command-Line Argument Parsing
-- [ ] Task 6: Basic UI Rendering (Drawing Boards, Cursor, Messages)
-- [ ] Task 7: Implement Network Connection (Host/Join)
+- [x] Task 6: Basic UI Rendering (Drawing Boards, Cursor, Messages)
+- [x] Task 7: Implement Network Connection (Host/Join)
 - [ ] Task 8: Implement Communication Protocol Messages and Handlers
 - [ ] Task 9: Implement Ship Placement Logic and Robust Readiness
 - [ ] Task 10: Implement Battle Phase Logic (Firing, Hit/Miss, Sunk)
