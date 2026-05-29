@@ -1,0 +1,38 @@
+package network
+
+import (
+	"context"
+	"net"
+)
+
+func StartHost(ctx context.Context, port string) (net.Conn, error) {
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", port)
+	if err != nil {
+		return nil, err
+	}
+	defer ln.Close()
+
+	// Wait for connection
+	type res struct {
+		conn net.Conn
+		err  error
+	}
+	ch := make(chan res)
+	go func() {
+		conn, err := ln.Accept()
+		ch <- res{conn, err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case r := <-ch:
+		return r.conn, r.err
+	}
+}
+
+func ConnectToHost(ctx context.Context, addr string) (net.Conn, error) {
+	d := net.Dialer{}
+	return d.DialContext(ctx, "tcp", addr)
+}
