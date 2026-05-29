@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
-	"strings"
 
 	"go.battleship/network"
 )
@@ -24,13 +24,14 @@ type GameState struct {
 	LocalPlayer  *PlayerState
 	RemotePlayer *PlayerState
 	Phase        GamePhase
-	Connection   net.Conn // Network connection
-	TurnOwner    string   // Name of the player whose turn it is
-	UI           UIInterface   // Reference to the UI
+	Connection   net.Conn    // Network connection
+	TurnOwner    string      // Name of the player whose turn it is
+	UI           UIInterface // Reference to the UI
 
 	// Channels for network communication
 	incomingMsgs chan *network.Message
 	outgoingMsgs chan network.Message
+	LastShot     *Coordinate
 	CancelCtx    context.Context    // Context for cancellation of goroutines
 	CancelFunc   context.CancelFunc // Function to cancel context
 	wg           sync.WaitGroup     // WaitGroup for goroutines
@@ -54,6 +55,10 @@ func NewGame(localPlayerName, remotePlayerName string, gameUI UIInterface) *Game
 // TransitionPhase changes the current game phase.
 func (gs *GameState) TransitionPhase(newPhase GamePhase) {
 	gs.Phase = newPhase
+	if newPhase == PhaseBattle {
+		// Host always fires first
+		gs.TurnOwner = "Host"
+	}
 	gs.UI.SetMessage(fmt.Sprintf("Game phase transitioned to: %v", newPhase))
 	gs.UI.Draw(gs, nil, Horizontal) // Redraw with updated phase
 }
@@ -86,9 +91,9 @@ func (gs *GameState) StartGameLoop() {
 // Close gracefully shuts down the game state.
 func (gs *GameState) Close() {
 	if gs.CancelFunc != nil {
-		gs.CancelFunc()      // Signal goroutines to stop
+		gs.CancelFunc() // Signal goroutines to stop
 	}
-	gs.wg.Wait()        // Wait for them to finish
+	gs.wg.Wait() // Wait for them to finish
 	if gs.Connection != nil {
 		gs.Connection.Close() // Close network connection
 	}
@@ -173,11 +178,32 @@ func (gs *GameState) RemoveShip(t ShipType) error {
 	return gs.LocalPlayer.RemoveShip(t)
 }
 
+// FireShot fires a shot at the given coordinate on the opponent's tracking board.
+// Returns an error if it is not the local player's turn, the phase is wrong,
+// or the coordinate was already targeted.
+func (gs *GameState) FireShot(coord Coordinate) error {
+	if gs.Phase != PhaseBattle {
+		return fmt.Errorf("not in battle phase")
+	}
+	if gs.TurnOwner != gs.LocalPlayer.Name {
+		return fmt.Errorf("not your turn")
+	}
+	if gs.RemotePlayer.TrackingBoard.Grid[coord.Row][coord.Col] != Water {
+		return fmt.Errorf("coordinate already targeted")
+	}
+	gs.LastShot = &coord
+	gs.TurnOwner = "" // Clear while waiting for response
+	gs.SendMessage(network.CmdShot, "coord", coord.String())
+	gs.UI.SetMessage(fmt.Sprintf("Firing at %s...", coord.String()))
+	gs.UI.Draw(gs, nil, Horizontal)
+	return nil
+}
+
 // SetReady marks the local player as ready and sends a message to the opponent.
 func (gs *GameState) SetReady() {
 	gs.LocalPlayer.IsReady = true
 	gs.SendMessage(network.CmdPlacementDone)
-	
+
 	if gs.RemotePlayer.IsReady {
 		gs.TransitionPhase(PhaseBattle)
 	} else {
@@ -213,6 +239,75 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 			gs.UI.SetMessage("Opponent is ready.")
 			gs.UI.Draw(gs, nil, Horizontal)
 		}
+	case network.CmdShot:
+		if gs.Phase != PhaseBattle {
+			gs.UI.SetMessage("Shot received outside battle phase.")
+			gs.UI.Draw(gs, nil, Horizontal)
+			return
+		}
+		coordStr := msg.Args["coord"]
+		coord, err := ParseCoordinate(coordStr)
+		if err != nil {
+			gs.UI.SetMessage(fmt.Sprintf("Invalid coordinate: %v", coordStr))
+			gs.UI.Draw(gs, nil, Horizontal)
+			return
+		}
+
+		cellState, shipType, err := gs.LocalPlayer.RecordHit(coord)
+		if err != nil {
+			gs.SendMessage(network.CmdShotResult, "result", "miss")
+			return
+		}
+
+		result := ""
+		switch cellState {
+		case Hit:
+			result = "hit"
+		case Miss:
+			result = "miss"
+		case SunkShip:
+			result = "sunk"
+		}
+
+		args := []string{"result", result}
+		if result == "sunk" {
+			args = append(args, "shipType", shipType.String())
+		}
+		gs.SendMessage(network.CmdShotResult, args...)
+		// Opponent just fired — now it is the local player's turn
+		gs.TurnOwner = gs.LocalPlayer.Name
+		gs.UI.SetMessage(fmt.Sprintf("Your turn! Opponent fired at %s (%s). Fire back.", coordStr, result))
+		gs.UI.Draw(gs, nil, Horizontal)
+	case network.CmdShotResult:
+		if gs.Phase != PhaseBattle {
+			return
+		}
+
+		result := msg.Args["result"]
+		coord := *gs.LastShot
+
+		// Update TrackingBoard and account for sunk ships
+		switch result {
+		case "hit":
+			gs.RemotePlayer.TrackingBoard.Grid[coord.Row][coord.Col] = Hit
+			gs.UI.SetMessage(fmt.Sprintf("Hit at %s! It's now opponent's turn.", coord.String()))
+		case "miss":
+			gs.RemotePlayer.TrackingBoard.Grid[coord.Row][coord.Col] = Miss
+			gs.UI.SetMessage(fmt.Sprintf("Miss at %s. Opponent's turn.", coord.String()))
+		case "sunk":
+			gs.RemotePlayer.TrackingBoard.Grid[coord.Row][coord.Col] = SunkShip
+			gs.RemotePlayer.ShipsRemaining--
+			if gs.RemotePlayer.ShipsRemaining <= 0 {
+				gs.TransitionPhase(PhaseGameOver)
+				gs.UI.SetMessage("You win! All opponent ships sunk!")
+				gs.UI.Draw(gs, nil, Horizontal)
+				return
+			}
+			gs.UI.SetMessage(fmt.Sprintf("Sunk %s at %s! Opponent's turn.", msg.Args["shipType"], coord.String()))
+		}
+		// Local player just received their shot result — now it is opponent's turn
+		gs.TurnOwner = gs.RemotePlayer.Name
+		gs.UI.Draw(gs, nil, Horizontal)
 	case network.CmdQuit:
 		gs.UI.SetMessage("Opponent quit the game.")
 		gs.UI.Draw(gs, nil, Horizontal)
@@ -241,4 +336,3 @@ func (gs *GameState) SendMessage(cmd network.Command, args ...string) {
 		fmt.Println("SendMessage: Outgoing message queue full, dropping message.")
 	}
 }
-

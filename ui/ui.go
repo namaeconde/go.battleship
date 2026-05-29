@@ -2,9 +2,10 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
 	"go.battleship/game"
-	"strings"
 )
 
 // UIInterface defines the interface for our UI.
@@ -15,9 +16,10 @@ type UIInterface interface {
 
 // UI implements the UIInterface for tcell.
 type UI struct {
-	screen  tcell.Screen
-	Cursor  game.Coordinate
-	Message string
+	screen      tcell.Screen
+	Cursor      game.Coordinate
+	TargetCoord *game.Coordinate // Confirmed shot target during battle phase
+	Message     string
 }
 
 // NewUI creates a new UI instance.
@@ -47,7 +49,7 @@ func (u *UI) Draw(gs *game.GameState, currentShip *game.Ship, currentOrientation
 	}
 
 	u.screen.Clear()
-	drawBoards(u.screen, gs.LocalPlayer, gs.RemotePlayer, u.Cursor, gs.Phase, currentShip, currentOrientation)
+	drawBoards(u.screen, gs.LocalPlayer, gs.RemotePlayer, u.Cursor, u.TargetCoord, gs.Phase, currentShip, currentOrientation)
 	drawMessage(u.screen, u.Message)
 	u.screen.Show()
 }

@@ -7,10 +7,12 @@ import (
 
 // PlayerState represents the state of a player in the game.
 type PlayerState struct {
-	Name    string
-	Ships   []Ship
-	Board   *Board
-	IsReady bool
+	Name           string
+	Ships          []Ship
+	Board          *Board
+	TrackingBoard  *Board
+	IsReady        bool
+	ShipsRemaining int
 }
 
 // NewPlayer initializes a player with the default set of ships and a new board.
@@ -24,9 +26,11 @@ func NewPlayer(name string) *PlayerState {
 	}
 
 	return &PlayerState{
-		Name:  name,
-		Ships: ships,
-		Board: NewBoard(),
+		Name:           name,
+		Ships:          ships,
+		Board:          NewBoard(),
+		TrackingBoard:  NewBoard(),
+		ShipsRemaining: len(ships),
 	}
 }
 
@@ -71,6 +75,7 @@ func (p *PlayerState) RecordHit(coord Coordinate) (CellState, ShipType, error) {
 
 				if isSunk {
 					p.Board.UpdateCellsAsSunk(ship.Coordinates)
+					p.ShipsRemaining--
 					return SunkShip, ship.Type, nil
 				}
 				return Hit, ship.Type, nil

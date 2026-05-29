@@ -2,15 +2,15 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"time"
-	"net"
 
-	"go.battleship/cmd"
-	"go.battleship/game" // Import the game package
-	"go.battleship/ui" // Import ui package
-	"go.battleship/network" // Import network package
 	"github.com/gdamore/tcell/v2"
+	"go.battleship/cmd"
+	"go.battleship/game"    // Import the game package
+	"go.battleship/network" // Import network package
+	"go.battleship/ui"      // Import ui package
 )
 
 func main() {
@@ -46,7 +46,7 @@ func main() {
 	}
 	gs := game.NewGame(localPlayerName, remotePlayerName, gameUI)
 	defer gs.Close()
-	
+
 	// --- Network Connection Setup ---
 	var conn net.Conn
 	if appConfig.IsHost {
@@ -107,7 +107,8 @@ func main() {
 				case tcell.KeyRight:
 					gameUI.Cursor.Col++
 				case tcell.KeyEnter:
-					if gs.Phase == game.PhasePlacement {
+					switch gs.Phase {
+					case game.PhasePlacement:
 						if currentShip != nil {
 							coords := []game.Coordinate{}
 							for i := 0; i < currentShip.Size; i++ {
@@ -122,16 +123,43 @@ func main() {
 								gameUI.SetMessage(fmt.Sprintf("Error: %v", err))
 							} else {
 								gameUI.SetMessage("Ship placed!")
+								// Move to next ship
+								found := false
+								for i, ship := range gs.LocalPlayer.Ships {
+									if ship.Type == currentShip.Type {
+										if i+1 < len(gs.LocalPlayer.Ships) {
+											currentShip = &gs.LocalPlayer.Ships[i+1]
+										} else {
+											currentShip = nil
+										}
+										found = true
+										break
+									}
+								}
+								if !found {
+									currentShip = nil
+								}
 							}
 						} else {
 							gs.SetReady()
 						}
+					case game.PhaseBattle:
+						// Fire at the confirmed target (set with Space)
+						if gameUI.TargetCoord == nil {
+							gameUI.SetMessage("Aim first: move cursor with arrows, press Space to confirm target, then Enter to fire.")
+						} else {
+							err := gs.FireShot(*gameUI.TargetCoord)
+							if err != nil {
+								gameUI.SetMessage(fmt.Sprintf("Cannot fire: %v", err))
+							} else {
+								gameUI.TargetCoord = nil // Clear confirmed target after firing
+							}
+						}
 					}
 				case tcell.KeyRune:
-					if ev.Rune() == ' ' && gs.Phase == game.PhasePlacement {
-						// Remove ship at cursor
-						// This needs logic to identify the ship at the cursor
-						// Assuming currentShip for simplicity
+					switch {
+					case ev.Rune() == ' ' && gs.Phase == game.PhasePlacement:
+						// Remove current ship from board during placement
 						if currentShip != nil {
 							err := gs.RemoveShip(currentShip.Type)
 							if err != nil {
@@ -140,14 +168,27 @@ func main() {
 								gameUI.SetMessage("Ship removed!")
 							}
 						}
+					case ev.Rune() == ' ' && gs.Phase == game.PhaseBattle:
+						// Confirm the targeting coordinate at the current cursor position
+						target := game.Coordinate{Row: gameUI.Cursor.Row, Col: gameUI.Cursor.Col}
+						gameUI.TargetCoord = &target
+						gameUI.SetMessage(fmt.Sprintf("Targeting %s — press Enter to fire.", target.String()))
 					}
 				}
 				// Keep cursor within bounds
-				if gameUI.Cursor.Row < 0 { gameUI.Cursor.Row = 0 }
-				if gameUI.Cursor.Row >= 10 { gameUI.Cursor.Row = 10 - 1 }
-				if gameUI.Cursor.Col < 0 { gameUI.Cursor.Col = 0 }
-				if gameUI.Cursor.Col >= 10 { gameUI.Cursor.Col = 10 - 1 }
-				
+				if gameUI.Cursor.Row < 0 {
+					gameUI.Cursor.Row = 0
+				}
+				if gameUI.Cursor.Row >= 10 {
+					gameUI.Cursor.Row = 10 - 1
+				}
+				if gameUI.Cursor.Col < 0 {
+					gameUI.Cursor.Col = 0
+				}
+				if gameUI.Cursor.Col >= 10 {
+					gameUI.Cursor.Col = 10 - 1
+				}
+
 				gameUI.Draw(gs, currentShip, currentOrientation)
 			case *tcell.EventResize:
 				s.Sync()

@@ -18,21 +18,21 @@ const (
 )
 
 // drawBoards draws both the local player's board and the tracking board.
-func drawBoards(s tcell.Screen, localPlayer *game.PlayerState, remotePlayer *game.PlayerState, cursor game.Coordinate, phase game.GamePhase, currentShip *game.Ship, currentOrientation game.Orientation) {
+func drawBoards(s tcell.Screen, localPlayer *game.PlayerState, remotePlayer *game.PlayerState, cursor game.Coordinate, targetCoord *game.Coordinate, phase game.GamePhase, currentShip *game.Ship, currentOrientation game.Orientation) {
 	// Draw Local Player's Board (Left)
 	if localPlayer != nil && localPlayer.Board != nil {
-		drawBoard(s, localPlayer.Board, BoardOffsetX, BoardOffsetY, cursor, true, phase == game.PhasePlacement, phase, currentShip, currentOrientation)
+		drawBoard(s, localPlayer.Board, BoardOffsetX, BoardOffsetY, cursor, nil, true, phase == game.PhasePlacement, phase, currentShip, currentOrientation)
 	}
 
-	// Draw Remote Player's Board (Right) - This acts as the tracking board for the local player
-	if remotePlayer != nil && remotePlayer.Board != nil {
+	// Draw Remote Player's Tracking Board (Right) — shows local player's shots against opponent
+	if remotePlayer != nil && remotePlayer.TrackingBoard != nil {
 		remoteBoardOffsetX := BoardOffsetX + (BoardWidth*CellWidth + 10)
-		drawBoard(s, remotePlayer.Board, remoteBoardOffsetX, BoardOffsetY, cursor, false, phase == game.PhaseBattle, phase, nil, game.Horizontal)
+		drawBoard(s, remotePlayer.TrackingBoard, remoteBoardOffsetX, BoardOffsetY, cursor, targetCoord, false, phase == game.PhaseBattle, phase, nil, game.Horizontal)
 	}
 }
 
 // drawBoard draws a single game board with coordinate labels.
-func drawBoard(s tcell.Screen, board *game.Board, offsetX, offsetY int, cursor game.Coordinate, isPlayerBoard bool, showCursor bool, phase game.GamePhase, currentShip *game.Ship, currentOrientation game.Orientation) {
+func drawBoard(s tcell.Screen, board *game.Board, offsetX, offsetY int, cursor game.Coordinate, targetCoord *game.Coordinate, isPlayerBoard bool, showCursor bool, phase game.GamePhase, currentShip *game.Ship, currentOrientation game.Orientation) {
 	style := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
 	labelStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow).Background(tcell.ColorBlack)
 	hitStyle := tcell.StyleDefault.Foreground(tcell.ColorRed).Background(tcell.ColorBlack)
@@ -104,9 +104,11 @@ func drawBoard(s tcell.Screen, board *game.Board, offsetX, offsetY int, cursor g
 					cellStyle = potentialPlacementStyle
 					char = '#'
 				}
-			} else if !isPlayerBoard && phase == game.PhaseBattle && showCursor && cursor.Row == r && cursor.Col == c {
-				// Highlight potential shot target
-				cellStyle = potentialShotStyle
+			} else if !isPlayerBoard && phase == game.PhaseBattle && showCursor {
+				// Highlight confirmed target in orange (takes priority over cursor yellow)
+				if targetCoord != nil && targetCoord.Row == r && targetCoord.Col == c {
+					cellStyle = potentialShotStyle
+				}
 			}
 
 			// Draw cell content

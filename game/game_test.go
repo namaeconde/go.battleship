@@ -3,6 +3,7 @@ package game
 
 import (
 	"testing"
+	"go.battleship/network"
 )
 
 // Mock UI for testing GameState without actual tcell screen.
@@ -62,5 +63,32 @@ func TestTransitionPhase(t *testing.T) {
 	gs.TransitionPhase(PhaseGameOver)
 	if gs.Phase != PhaseGameOver {
 		t.Errorf("Expected phase PhaseGameOver, got %v", gs.Phase)
+	}
+}
+
+// TestHandleCmdShot tests processing a SHOT command during Battle phase.
+func TestHandleCmdShot(t *testing.T) {
+	mockUI := &MockUI{}
+	gs := NewGame("Host", "Joiner", mockUI)
+	gs.Phase = PhaseBattle
+
+	// Send SHOT command
+	msg := &network.Message{
+		Command: network.CmdShot,
+		Args: map[string]string{
+			"coord": "A1",
+		},
+	}
+
+	gs.handleIncomingMessage(msg)
+
+	// Verify response is in outgoing queue
+	select {
+	case response := <-gs.outgoingMsgs:
+		if response.Command != network.CmdShotResult {
+			t.Errorf("Expected CmdShotResult, got %s", response.Command)
+		}
+	default:
+		t.Error("Expected response in outgoingMsgs, but channel empty")
 	}
 }

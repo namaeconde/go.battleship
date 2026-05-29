@@ -11,7 +11,7 @@ func TestNetworkConnection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	port := ":0"
+	port := "0"
 	
 	// Try to start host
 	connChan := make(chan net.Conn)
