@@ -7,7 +7,7 @@ import (
 
 func StartHost(ctx context.Context, port string, addrChan chan<- string) (net.Conn, error) {
 	lc := net.ListenConfig{}
-	ln, err := lc.Listen(ctx, "tcp", port)
+	ln, err := lc.Listen(ctx, "tcp", ":"+port)
 	if err != nil {
 		return nil, err
 	}
