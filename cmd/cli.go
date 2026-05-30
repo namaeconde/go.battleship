@@ -26,6 +26,7 @@ var rootCmd = &cobra.Command{
 var hostCmd = &cobra.Command{
 	Use:   "host",
 	Short: "Create a new game and wait for opponent",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		isHost = true
 		conn, gameID, err := network.CreateGame(context.Background(), serverURL)
