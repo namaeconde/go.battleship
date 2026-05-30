@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 )
@@ -53,4 +54,31 @@ func TestNetworkConnection(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("Timeout waiting for connection")
 	}
+}
+
+func TestCreateAndJoinGame_Integration(t *testing.T) {
+	// This test requires a running gRPC server. Skip if SERVER_URL not set.
+	serverURL := os.Getenv("BATTLESHIP_SERVER_URL")
+	if serverURL == "" {
+		t.Skip("BATTLESHIP_SERVER_URL not set; skipping integration test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	hostConn, gameID, err := CreateGame(ctx, serverURL)
+	if err != nil {
+		t.Fatalf("CreateGame: %v", err)
+	}
+	defer hostConn.Close()
+
+	if len(gameID) != 6 {
+		t.Fatalf("expected 6-char game_id, got %q", gameID)
+	}
+
+	joinerConn, err := JoinGame(ctx, serverURL, gameID)
+	if err != nil {
+		t.Fatalf("JoinGame: %v", err)
+	}
+	defer joinerConn.Close()
 }
