@@ -9,13 +9,11 @@ import (
 type Command string
 
 const (
-	CmdConnectRequest Command = "CONNECT_REQUEST"
-	CmdConnectAck     Command = "CONNECT_ACK"
-	CmdPlacementDone  Command = "PLACEMENT_DONE"
-	CmdShot           Command = "SHOT"
-	CmdShotResult     Command = "SHOT_RESULT"
-	CmdQuit           Command = "QUIT"
-	CmdReplayRequest  Command = "REPLAY_REQUEST"
+	CmdPlacementDone Command = "PLACEMENT_DONE"
+	CmdShot          Command = "SHOT"
+	CmdShotResult    Command = "SHOT_RESULT"
+	CmdQuit          Command = "QUIT"
+	CmdReplayRequest Command = "REPLAY_REQUEST"
 )
 
 type Message struct {

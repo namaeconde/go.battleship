@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/spf13/cobra"
@@ -71,6 +70,12 @@ func Execute() {
 	}
 }
 
+func initializeGameSession(gs *game.GameState) {
+	gs.TransitionPhase(game.PhasePlacement)
+	gs.UI.SetMessage("Connection established! Place your ships.")
+	gs.UI.Draw(gs, nil, game.Horizontal)
+}
+
 func RunGame(conn game.NetworkConn) {
 	s, err := tcell.NewScreen()
 	if err != nil {
@@ -97,15 +102,7 @@ func RunGame(conn game.NetworkConn) {
 	defer gs.Close()
 	gs.Connection = conn
 
-	gameUI.SetMessage("Connection established! Starting game...")
-	gameUI.Draw(gs, nil, game.Horizontal)
-	time.Sleep(2 * time.Second)
-
-	if isHost {
-		gs.SendMessage(network.CmdConnectAck)
-	} else {
-		gs.SendMessage(network.CmdConnectRequest)
-	}
+	initializeGameSession(gs)
 	go gs.StartGameLoop()
 
 	currentShip := gs.LocalPlayer.GetShipByType(game.Carrier)

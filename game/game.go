@@ -260,19 +260,6 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 	gs.UI.Draw(gs, nil, Horizontal) // Redraw to show message immediately
 
 	switch msg.Command {
-	case network.CmdConnectRequest:
-		if gs.LocalPlayer.Name == "Host" {
-			gs.SendMessage(network.CmdConnectAck)
-			gs.TransitionPhase(PhasePlacement)
-			gs.UI.SetMessage("Opponent connected. Ready for ship placement. Press Enter when done.")
-			gs.UI.Draw(gs, nil, Horizontal)
-		}
-	case network.CmdConnectAck:
-		if gs.LocalPlayer.Name == "Joiner" {
-			gs.TransitionPhase(PhasePlacement)
-			gs.UI.SetMessage("Connected to host. Ready for ship placement. Press Enter when done.")
-			gs.UI.Draw(gs, nil, Horizontal)
-		}
 	case network.CmdPlacementDone:
 		gs.RemotePlayer.IsReady = true
 		if gs.LocalPlayer.IsReady {

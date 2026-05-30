@@ -82,20 +82,20 @@ func TestGRPCConnSendReceive(t *testing.T) {
 }
 
 func TestNilArgsInSend(t *testing.T) {
-grpcConn, cleanup := setupGRPCTest(t)
-defer cleanup()
+	grpcConn, cleanup := setupGRPCTest(t)
+	defer cleanup()
 
-// Send message with nil Args
-nilArgsMsg := Message{Command: CmdConnectAck, Args: nil}
-if err := grpcConn.Send(nilArgsMsg); err != nil {
-t.Fatalf("Send with nil Args: %v", err)
-}
+	// Send message with nil Args
+	nilArgsMsg := Message{Command: CmdPlacementDone, Args: nil}
+	if err := grpcConn.Send(nilArgsMsg); err != nil {
+		t.Fatalf("Send with nil Args: %v", err)
+	}
 
-received, err := grpcConn.Receive()
-if err != nil {
-t.Fatalf("Receive: %v", err)
-}
-if received.Command != CmdConnectAck {
-t.Fatalf("got %v, want %v", received.Command, CmdConnectAck)
-}
+	received, err := grpcConn.Receive()
+	if err != nil {
+		t.Fatalf("Receive: %v", err)
+	}
+	if received.Command != CmdPlacementDone {
+		t.Fatalf("got %v, want %v", received.Command, CmdPlacementDone)
+	}
 }

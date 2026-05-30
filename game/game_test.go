@@ -2,13 +2,15 @@
 package game
 
 import (
+	"strings"
 	"testing"
+
 	"go.battleship/network"
 )
 
 // Mock UI for testing GameState without actual tcell screen.
 type MockUI struct {
-	Messages []string
+	Messages  []string
 	DrawCalls int
 }
 
@@ -18,7 +20,6 @@ func (m *MockUI) SetMessage(msg string) {
 func (m *MockUI) Draw(gs *GameState, currentShip *Ship, currentOrientation Orientation) {
 	m.DrawCalls++
 }
-
 
 // TestNewGame initializes a new game state.
 func TestNewGame(t *testing.T) {
@@ -90,5 +91,42 @@ func TestHandleCmdShot(t *testing.T) {
 		}
 	default:
 		t.Error("Expected response in outgoingMsgs, but channel empty")
+	}
+}
+
+func TestLegacyConnectMessagesAreIgnored(t *testing.T) {
+	tests := []struct {
+		name      string
+		localName string
+		command   network.Command
+	}{
+		{name: "host ignores connect request", localName: "Host", command: network.Command("CONNECT_REQUEST")},
+		{name: "joiner ignores connect ack", localName: "Joiner", command: network.Command("CONNECT_ACK")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockUI := &MockUI{}
+			gs := NewGame(tt.localName, "Opponent", mockUI)
+
+			gs.handleIncomingMessage(&network.Message{Command: tt.command})
+
+			if gs.Phase != PhaseConnection {
+				t.Fatalf("expected phase to remain %v, got %v", PhaseConnection, gs.Phase)
+			}
+
+			select {
+			case msg := <-gs.outgoingMsgs:
+				t.Fatalf("expected no response message, got %v", msg.Command)
+			default:
+			}
+
+			if len(mockUI.Messages) == 0 {
+				t.Fatal("expected UI message for ignored legacy command")
+			}
+			if !strings.Contains(mockUI.Messages[len(mockUI.Messages)-1], "Unhandled command") {
+				t.Fatalf("expected unhandled command message, got %q", mockUI.Messages[len(mockUI.Messages)-1])
+			}
+		})
 	}
 }
