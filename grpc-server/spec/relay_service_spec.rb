@@ -42,4 +42,58 @@ RSpec.describe BattleshipRelayService do
       expect(resp.error_message).to include('full')
     end
   end
+
+  describe '#game_stream' do
+    it 'relays a message from player A to player B' do
+      create_resp = service.create_game(Battleship::CreateGameRequest.new, nil)
+      game_id     = create_resp.game_id
+
+      msg_a = Battleship::GameMessage.new(game_id: game_id, command: 'SHOT', args: { 'coord' => 'A1' })
+      msg_b = Battleship::GameMessage.new(game_id: game_id, command: 'SHOT_RESULT', args: { 'result' => 'hit' })
+
+      a_request_queue = Queue.new
+      b_request_queue = Queue.new
+      a_request_queue << msg_a
+
+      a_requests = Enumerator.new { |y| loop { item = a_request_queue.pop; break if item == :done; y << item } }
+      b_requests = Enumerator.new { |y| loop { item = b_request_queue.pop; break if item == :done; y << item } }
+
+      a_enum = service.game_stream(a_requests, nil)
+      b_enum = service.game_stream(b_requests, nil)
+
+      sleep 0.1
+
+      b_request_queue << msg_b
+      sleep 0.1
+
+      received = nil
+      timeout = Time.now + 1
+      until received || Time.now > timeout
+        begin
+          received = a_enum.next
+        rescue StopIteration
+          break
+        end
+      end
+
+      expect(received).not_to be_nil
+      expect(received.command).to eq('SHOT_RESULT')
+
+      a_request_queue << :done
+      b_request_queue << :done
+    end
+
+    it 'rejects a stream with an unknown game_id by sending eof' do
+      bad_msg = Battleship::GameMessage.new(game_id: 'XXXXXX', command: 'SHOT')
+      req_q   = Queue.new
+      req_q   << bad_msg
+      req_q   << :done
+
+      requests = Enumerator.new { |y| loop { item = req_q.pop; break if item == :done; y << item } }
+      enum     = service.game_stream(requests, nil)
+
+      sleep 0.1
+      expect { enum.next }.to raise_error(StopIteration)
+    end
+  end
 end

@@ -14,8 +14,11 @@ class BattleshipRelayService < Battleship::BattleshipRelay::Service
   end
 
   def create_game(_req, _call)
-    game_id = generate_game_id
-    @mutex.synchronize { @sessions[game_id] = { player_b_joined: false, streams: [] } }
+    game_id = @mutex.synchronize do
+      id = generate_game_id
+      @sessions[id] = { player_b_joined: false, streams: [] }
+      id
+    end
     Battleship::CreateGameResponse.new(game_id: game_id)
   end
 
@@ -30,20 +33,35 @@ class BattleshipRelayService < Battleship::BattleshipRelay::Service
     Battleship::JoinGameResponse.new(success: true)
   end
 
-  def game_stream(requests)
-    game_id = nil
+  def game_stream(requests, _call)
     queue   = Queue.new
+    game_id = nil
 
-    requests.each do |msg|
-      if game_id.nil?
-        game_id = msg.game_id
-        register_stream(game_id, queue)
+    Thread.new do
+      begin
+        requests.each do |msg|
+          if game_id.nil?
+            game_id = msg.game_id
+            unless @mutex.synchronize { @sessions.key?(game_id) }
+              queue << :eof
+              break
+            end
+            register_stream(game_id, queue)
+          end
+          relay_to_opponent(game_id, queue, msg)
+        end
+      ensure
+        deregister_stream(game_id, queue) if game_id
+        queue << :eof
       end
-      relay_to_opponent(game_id, queue, msg)
     end
 
     Enumerator.new do |y|
-      loop { y << queue.pop }
+      loop do
+        msg = queue.pop
+        break if msg == :eof
+        y << msg
+      end
     end
   end
 
@@ -51,13 +69,27 @@ class BattleshipRelayService < Battleship::BattleshipRelay::Service
 
   def generate_game_id
     chars = ('A'..'Z').to_a + ('0'..'9').to_a
-    6.times.map { chars.sample }.join
+    loop do
+      id = 6.times.map { chars.sample }.join
+      return id unless @sessions.key?(id)
+    end
   end
 
   def register_stream(game_id, queue)
     @mutex.synchronize do
-      @sessions[game_id] ||= { player_b_joined: false, streams: [] }
-      @sessions[game_id][:streams] << queue
+      session = @sessions[game_id]
+      return false unless session
+      return false if session[:streams].size >= 2
+      session[:streams] << queue
+      true
+    end
+  end
+
+  def deregister_stream(game_id, queue)
+    @mutex.synchronize do
+      session = @sessions[game_id]
+      return unless session
+      session[:streams].delete(queue)
     end
   end
 
