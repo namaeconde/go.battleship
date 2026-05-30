@@ -45,6 +45,7 @@ type GameState struct {
 	CancelCtx           context.Context    // Context for cancellation of goroutines
 	CancelFunc          context.CancelFunc // Function to cancel context
 	wg                  sync.WaitGroup     // WaitGroup for goroutines
+	mu                  sync.Mutex         // Protects ready/phase transition logic
 }
 
 // NewGame initializes a new GameState with two players.
@@ -211,10 +212,14 @@ func (gs *GameState) FireShot(coord Coordinate) error {
 
 // SetReady marks the local player as ready and sends a message to the opponent.
 func (gs *GameState) SetReady() {
+	gs.mu.Lock()
 	gs.LocalPlayer.IsReady = true
+	bothReady := gs.RemotePlayer.IsReady
+	gs.mu.Unlock()
+
 	gs.SendMessage(network.CmdPlacementDone)
 
-	if gs.RemotePlayer.IsReady {
+	if bothReady {
 		gs.TransitionPhase(PhaseBattle)
 	} else {
 		gs.UI.SetMessage("Waiting for opponent...")
@@ -261,8 +266,12 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 
 	switch msg.Command {
 	case network.CmdPlacementDone:
+		gs.mu.Lock()
 		gs.RemotePlayer.IsReady = true
-		if gs.LocalPlayer.IsReady {
+		bothReady := gs.LocalPlayer.IsReady
+		gs.mu.Unlock()
+
+		if bothReady {
 			gs.TransitionPhase(PhaseBattle)
 		} else {
 			gs.UI.SetMessage("Opponent is ready.")

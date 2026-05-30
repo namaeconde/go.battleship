@@ -32,6 +32,14 @@ var hostCmd = &cobra.Command{
 		}
 		fmt.Printf("Game created! Share this code with your opponent: %s\n", gameID)
 		fmt.Println("Waiting for opponent to join...")
+
+		// Block until the opponent joins and their initial stream message arrives.
+		_, err = conn.Receive()
+		if err != nil {
+			return fmt.Errorf("waiting for opponent: %w", err)
+		}
+		fmt.Println("Opponent joined! Starting game...")
+
 		RunGame(conn, true)
 		return nil
 	},
@@ -47,7 +55,8 @@ var joinCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("joining game: %w", err)
 		}
-		fmt.Printf("Joined game %s!\n", gameID)
+		fmt.Printf("Joined game %s! Starting game...\n", gameID)
+
 		RunGame(conn, false)
 		return nil
 	},
