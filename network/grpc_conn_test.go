@@ -54,11 +54,10 @@ func setupGRPCTest(t *testing.T) (*GRPCConn, func()) {
 		t.Fatalf("GameStream: %v", err)
 	}
 
-	grpcConn := NewGRPCConn(stream, "TESTID")
+	grpcConn := NewGRPCConn(stream, "TESTID", conn)
 
 	cleanup := func() {
 		grpcConn.Close()
-		conn.Close()
 		srv.Stop()
 	}
 	return grpcConn, cleanup
@@ -80,4 +79,23 @@ func TestGRPCConnSendReceive(t *testing.T) {
 	if got.Command != want.Command || got.Args["coord"] != want.Args["coord"] {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
+}
+
+func TestNilArgsInSend(t *testing.T) {
+grpcConn, cleanup := setupGRPCTest(t)
+defer cleanup()
+
+// Send message with nil Args
+nilArgsMsg := Message{Command: CmdConnectAck, Args: nil}
+if err := grpcConn.Send(nilArgsMsg); err != nil {
+t.Fatalf("Send with nil Args: %v", err)
+}
+
+received, err := grpcConn.Receive()
+if err != nil {
+t.Fatalf("Receive: %v", err)
+}
+if received.Command != CmdConnectAck {
+t.Fatalf("got %v, want %v", received.Command, CmdConnectAck)
+}
 }

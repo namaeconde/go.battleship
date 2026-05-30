@@ -3,17 +3,20 @@ package network
 
 import (
 	battleshipgrpc "go.battleship/proto/battleshipgrpc"
+	"google.golang.org/grpc"
 )
 
 // GRPCConn wraps a BattleshipRelay_GameStreamClient and implements game.NetworkConn.
 type GRPCConn struct {
 	stream battleshipgrpc.BattleshipRelay_GameStreamClient
 	gameID string
+	conn   *grpc.ClientConn // underlying transport; closed by Close()
 }
 
-// NewGRPCConn creates a GRPCConn from an open GameStream client.
-func NewGRPCConn(stream battleshipgrpc.BattleshipRelay_GameStreamClient, gameID string) *GRPCConn {
-	return &GRPCConn{stream: stream, gameID: gameID}
+// NewGRPCConn creates a GRPCConn from an open GameStream client and its parent connection.
+// Pass nil for conn when managing the connection lifecycle externally (e.g. in tests).
+func NewGRPCConn(stream battleshipgrpc.BattleshipRelay_GameStreamClient, gameID string, conn *grpc.ClientConn) *GRPCConn {
+	return &GRPCConn{stream: stream, gameID: gameID, conn: conn}
 }
 
 // Send encodes a network.Message as a GameMessage proto and sends it on the stream.
@@ -45,7 +48,13 @@ func (c *GRPCConn) Receive() (*Message, error) {
 	}, nil
 }
 
-// Close half-closes the stream (signals no more sends).
+// Close half-closes the stream and shuts down the underlying connection.
 func (c *GRPCConn) Close() error {
-	return c.stream.CloseSend()
+	err := c.stream.CloseSend()
+	if c.conn != nil {
+		if cerr := c.conn.Close(); err == nil {
+			err = cerr
+		}
+	}
+	return err
 }

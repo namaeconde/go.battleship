@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	battleshipgrpc "go.battleship/proto/battleshipgrpc"
 	"google.golang.org/grpc"
@@ -82,7 +83,7 @@ func CreateGame(ctx context.Context, serverAddr string) (*GRPCConn, string, erro
 		return nil, "", fmt.Errorf("CreateGame JOIN: %w", err)
 	}
 
-	return NewGRPCConn(stream, gameID), gameID, nil
+	return NewGRPCConn(stream, gameID, grpcConn), gameID, nil
 }
 
 // JoinGame dials the gRPC relay server, joins an existing game session by game_id,
@@ -116,17 +117,19 @@ func JoinGame(ctx context.Context, serverAddr string, gameID string) (*GRPCConn,
 		return nil, fmt.Errorf("JoinGame JOIN: %w", err)
 	}
 
-	return NewGRPCConn(stream, gameID), nil
+	return NewGRPCConn(stream, gameID, grpcConn), nil
 }
 
 // dialServer opens a gRPC client connection to the relay server.
-// Uses TLS for https:// addresses, plaintext for everything else.
+// Strips http:// or https:// scheme; uses TLS for https addresses, plaintext otherwise.
 func dialServer(addr string) (*grpc.ClientConn, error) {
-	var creds grpc.DialOption
-	if len(addr) >= 5 && addr[:5] == "https" {
-		creds = grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, ""))
+	var opt grpc.DialOption
+	if strings.HasPrefix(addr, "https://") {
+		addr = strings.TrimPrefix(addr, "https://")
+		opt = grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, ""))
 	} else {
-		creds = grpc.WithTransportCredentials(insecure.NewCredentials())
+		addr = strings.TrimPrefix(addr, "http://")
+		opt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
-	return grpc.NewClient(addr, creds)
+	return grpc.NewClient(addr, opt)
 }
