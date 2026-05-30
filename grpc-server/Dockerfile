@@ -1,4 +1,3 @@
-# grpc-server/Dockerfile
 FROM ruby:3.3-slim
 
 WORKDIR /app
