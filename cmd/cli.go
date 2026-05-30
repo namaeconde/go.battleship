@@ -14,7 +14,6 @@ import (
 
 var (
 	serverURL string
-	isHost    bool
 )
 
 var rootCmd = &cobra.Command{
@@ -27,14 +26,13 @@ var hostCmd = &cobra.Command{
 	Short: "Create a new game and wait for opponent",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		isHost = true
 		conn, gameID, err := network.CreateGame(context.Background(), serverURL)
 		if err != nil {
 			return fmt.Errorf("creating game: %w", err)
 		}
 		fmt.Printf("Game created! Share this code with your opponent: %s\n", gameID)
 		fmt.Println("Waiting for opponent to join...")
-		RunGame(conn)
+		RunGame(conn, true)
 		return nil
 	},
 }
@@ -44,14 +42,13 @@ var joinCmd = &cobra.Command{
 	Short: "Join an existing game",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		isHost = false
 		gameID := args[0]
 		conn, err := network.JoinGame(context.Background(), serverURL, gameID)
 		if err != nil {
 			return fmt.Errorf("joining game: %w", err)
 		}
 		fmt.Printf("Joined game %s!\n", gameID)
-		RunGame(conn)
+		RunGame(conn, false)
 		return nil
 	},
 }
@@ -76,7 +73,7 @@ func initializeGameSession(gs *game.GameState) {
 	gs.UI.Draw(gs, nil, game.Horizontal)
 }
 
-func RunGame(conn game.NetworkConn) {
+func RunGame(conn game.NetworkConn, host bool) {
 	s, err := tcell.NewScreen()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -94,7 +91,7 @@ func RunGame(conn game.NetworkConn) {
 	gameUI := ui.NewUI(s)
 
 	localPlayerName, remotePlayerName := "Joiner", "Host"
-	if isHost {
+	if host {
 		localPlayerName, remotePlayerName = "Host", "Joiner"
 	}
 
@@ -114,6 +111,8 @@ func RunGame(conn game.NetworkConn) {
 		for {
 			ev := s.PollEvent()
 			switch ev := ev.(type) {
+			case *tcell.EventInterrupt:
+				return
 			case *tcell.EventKey:
 				if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC {
 					close(quit)
@@ -226,6 +225,11 @@ func RunGame(conn game.NetworkConn) {
 		}
 	}()
 
-	<-quit
+	select {
+	case <-quit:
+	case <-gs.CancelCtx.Done():
+	}
+	// Wake the input goroutine if blocked on PollEvent so it can exit cleanly.
+	s.PostEvent(tcell.NewEventInterrupt(struct{}{}))
 	fmt.Println("Exiting Battleship...")
 }
