@@ -66,15 +66,8 @@ RSpec.describe BattleshipRelayService do
       b_request_queue << msg_b
       sleep 0.1
 
-      received = nil
-      timeout = Time.now + 1
-      until received || Time.now > timeout
-        begin
-          received = a_enum.next
-        rescue StopIteration
-          break
-        end
-      end
+      receiver_thread = Thread.new { a_enum.next rescue nil }
+      received = receiver_thread.join(2)&.value  # 2-second timeout; nil if hung
 
       expect(received).not_to be_nil
       expect(received.command).to eq('SHOT_RESULT')

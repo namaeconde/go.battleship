@@ -2,6 +2,7 @@
 package game
 
 import (
+	"io"
 	"testing"
 	"go.battleship/network"
 )
@@ -20,8 +21,7 @@ func (f *fakeConn) Send(msg network.Message) error {
 
 func (f *fakeConn) Receive() (*network.Message, error) {
 	if len(f.inbox) == 0 {
-		// Block forever (test controls via channel); just return nil for now.
-		select {}
+		return nil, io.EOF
 	}
 	msg := f.inbox[0]
 	f.inbox = f.inbox[1:]

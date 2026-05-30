@@ -42,11 +42,10 @@ class BattleshipRelayService < Battleship::BattleshipRelay::Service
         requests.each do |msg|
           if game_id.nil?
             game_id = msg.game_id
-            unless @mutex.synchronize { @sessions.key?(game_id) }
-              queue << :eof
-              break
+            break unless @mutex.synchronize { @sessions.key?(game_id) }
+            unless register_stream(game_id, queue)
+              break  # ensure will fire :eof
             end
-            register_stream(game_id, queue)
           end
           relay_to_opponent(game_id, queue, msg)
         end
@@ -90,6 +89,7 @@ class BattleshipRelayService < Battleship::BattleshipRelay::Service
       session = @sessions[game_id]
       return unless session
       session[:streams].delete(queue)
+      @sessions.delete(game_id) if session[:streams].empty?
     end
   end
 
