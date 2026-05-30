@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"time"
 
@@ -48,7 +47,7 @@ func main() {
 	defer gs.Close()
 
 	// --- Network Connection Setup ---
-	var conn net.Conn
+	var conn *network.TCPConn
 	if appConfig.IsHost {
 		gameUI.SetMessage(fmt.Sprintf("Hosting on port %s. Waiting for opponent...", appConfig.Port))
 		gameUI.Draw(gs, nil, game.Horizontal)
@@ -65,7 +64,7 @@ func main() {
 		time.Sleep(3 * time.Second) // Give user time to read error
 		os.Exit(1)
 	}
-	gs.Connection = network.NewTCPConn(conn) // Wrap and assign the established connection to GameState
+	gs.Connection = conn // conn is already *TCPConn
 
 	gameUI.SetMessage("Connection established! Starting game...")
 	gameUI.Draw(gs, nil, game.Horizontal)

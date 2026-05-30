@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-func StartHost(ctx context.Context, port string, addrChan chan<- string) (net.Conn, error) {
+func StartHost(ctx context.Context, port string, addrChan chan<- string) (*TCPConn, error) {
 	lc := net.ListenConfig{}
 	ln, err := lc.Listen(ctx, "tcp", ":"+port)
 	if err != nil {
@@ -32,11 +32,18 @@ func StartHost(ctx context.Context, port string, addrChan chan<- string) (net.Co
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case r := <-ch:
-		return r.conn, r.err
+		if r.err != nil {
+			return nil, r.err
+		}
+		return NewTCPConn(r.conn), nil
 	}
 }
 
-func ConnectToHost(ctx context.Context, addr string) (net.Conn, error) {
+func ConnectToHost(ctx context.Context, addr string) (*TCPConn, error) {
 	d := net.Dialer{}
-	return d.DialContext(ctx, "tcp", addr)
+	c, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	return NewTCPConn(c), nil
 }

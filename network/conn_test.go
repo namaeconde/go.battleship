@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"net"
 	"testing"
 	"time"
 )
@@ -14,7 +13,7 @@ func TestNetworkConnection(t *testing.T) {
 	port := "0"
 	
 	// Try to start host
-	connChan := make(chan net.Conn)
+	connChan := make(chan *TCPConn)
 	errChan := make(chan error)
 	addrChan := make(chan string)
 
