@@ -20,16 +20,35 @@ Player A (Go client) ──gRPC──► Cloud Run Relay Server ◄──gRPC─
 
 ## How to Run
 
+### Build the Game
+```bash
+go build -o battleship .
+```
+
+### Configure the Server URL
+
+Create a `.env` file in the project root:
+```
+SERVER_URL=https://your-relay-server.run.app
+```
+
+Alternatively, export it in your shell:
+```bash
+export SERVER_URL=https://your-relay-server.run.app
+```
+
+> You can also pass `--server URL` to override both.
+
 ### Host a Game
 ```bash
-go run . host --server https://your-relay-server.run.app
+./battleship host
 ```
 
 This creates a new game session and prints a game code (e.g., `XYZABC`) to share with your opponent.
 
 ### Join a Game
 ```bash
-go run . join GAME_ID --server https://your-relay-server.run.app
+./battleship join GAME_ID
 ```
 
 Replace `GAME_ID` with the code provided by the host.

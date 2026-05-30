@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 	"go.battleship/game"
 	"go.battleship/network"
@@ -26,6 +27,9 @@ var hostCmd = &cobra.Command{
 	Short: "Create a new game and wait for opponent",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := validateServerURL(); err != nil {
+			return err
+		}
 		conn, gameID, err := network.CreateGame(context.Background(), serverURL)
 		if err != nil {
 			return fmt.Errorf("creating game: %w", err)
@@ -50,6 +54,9 @@ var joinCmd = &cobra.Command{
 	Short: "Join an existing game",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := validateServerURL(); err != nil {
+			return err
+		}
 		gameID := args[0]
 		conn, err := network.JoinGame(context.Background(), serverURL, gameID)
 		if err != nil {
@@ -63,11 +70,21 @@ var joinCmd = &cobra.Command{
 }
 
 func init() {
-	hostCmd.Flags().StringVar(&serverURL, "server", "", "gRPC relay server URL (required)")
-	hostCmd.MarkFlagRequired("server")
-	joinCmd.Flags().StringVar(&serverURL, "server", "", "gRPC relay server URL (required)")
-	joinCmd.MarkFlagRequired("server")
+	// Load .env file if present (does not override existing env vars)
+	godotenv.Load()
+
+	defaultServer := os.Getenv("SERVER_URL")
+	hostCmd.Flags().StringVar(&serverURL, "server", defaultServer, "gRPC relay server URL (or set SERVER_URL env var)")
+	joinCmd.Flags().StringVar(&serverURL, "server", defaultServer, "gRPC relay server URL (or set SERVER_URL env var)")
+
 	rootCmd.AddCommand(hostCmd, joinCmd)
+}
+
+func validateServerURL() error {
+	if serverURL == "" {
+		return fmt.Errorf("server URL is required: use --server flag or set SERVER_URL environment variable")
+	}
+	return nil
 }
 
 func Execute() {
