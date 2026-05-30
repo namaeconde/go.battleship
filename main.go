@@ -65,7 +65,7 @@ func main() {
 		time.Sleep(3 * time.Second) // Give user time to read error
 		os.Exit(1)
 	}
-	gs.Connection = conn // Assign the established connection to GameState
+	gs.Connection = network.NewTCPConn(conn) // Wrap and assign the established connection to GameState
 
 	gameUI.SetMessage("Connection established! Starting game...")
 	gameUI.Draw(gs, nil, game.Horizontal)

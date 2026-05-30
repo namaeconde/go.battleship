@@ -4,7 +4,6 @@ package game
 import (
 	"context"
 	"fmt"
-	"net"
 	"strings"
 	"sync"
 	"time"
@@ -19,12 +18,20 @@ type UIInterface interface {
 	Draw(gs *GameState, currentShip *Ship, currentOrientation Orientation)
 }
 
+// NetworkConn is the minimal interface both the legacy TCP connection and the
+// new gRPC stream wrapper must satisfy.
+type NetworkConn interface {
+	Send(msg network.Message) error
+	Receive() (*network.Message, error)
+	Close() error
+}
+
 // GameState holds the entire state of the game.
 type GameState struct {
 	LocalPlayer  *PlayerState
 	RemotePlayer *PlayerState
 	Phase        GamePhase
-	Connection   net.Conn    // Network connection
+	Connection   NetworkConn // Network connection
 	TurnOwner    string      // Name of the player whose turn it is
 	UI           UIInterface // Reference to the UI
 
@@ -120,7 +127,7 @@ func (gs *GameState) networkReader() {
 			fmt.Println("networkReader: Shutting down.")
 			return
 		default:
-			msg, err := network.Receive(gs.Connection)
+			msg, err := gs.Connection.Receive()
 			if err != nil {
 				if err.Error() == "EOF" || strings.Contains(err.Error(), "use of closed network connection") {
 					gs.UI.SetMessage("Opponent disconnected.")
@@ -149,7 +156,7 @@ func (gs *GameState) networkWriter() {
 			fmt.Println("networkWriter: Shutting down.")
 			return
 		case msg := <-gs.outgoingMsgs:
-			err := network.Send(gs.Connection, msg)
+			err := gs.Connection.Send(msg)
 			if err != nil {
 				gs.UI.SetMessage(fmt.Sprintf("Network write error: %v", err))
 				gs.UI.Draw(gs, nil, Horizontal)
