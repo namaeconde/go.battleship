@@ -77,6 +77,11 @@ func CreateGame(ctx context.Context, serverAddr string) (*GRPCConn, string, erro
 		return nil, "", fmt.Errorf("CreateGame GameStream: %w", err)
 	}
 
+	if err := stream.Send(&battleshipgrpc.GameMessage{GameId: gameID, Command: "JOIN"}); err != nil {
+		grpcConn.Close()
+		return nil, "", fmt.Errorf("CreateGame JOIN: %w", err)
+	}
+
 	return NewGRPCConn(stream, gameID), gameID, nil
 }
 
@@ -104,6 +109,11 @@ func JoinGame(ctx context.Context, serverAddr string, gameID string) (*GRPCConn,
 	if err != nil {
 		grpcConn.Close()
 		return nil, fmt.Errorf("JoinGame GameStream: %w", err)
+	}
+
+	if err := stream.Send(&battleshipgrpc.GameMessage{GameId: gameID, Command: "JOIN"}); err != nil {
+		grpcConn.Close()
+		return nil, fmt.Errorf("JoinGame JOIN: %w", err)
 	}
 
 	return NewGRPCConn(stream, gameID), nil
