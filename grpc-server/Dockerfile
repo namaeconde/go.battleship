@@ -13,7 +13,7 @@ RUN apt-get update \
 
 COPY . .
 
-RUN adduser --disabled-password --gecos "" appuser
+RUN useradd --no-create-home --shell /bin/false appuser
 USER appuser
 
 ENV PORT=8080
