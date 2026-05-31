@@ -7,20 +7,51 @@ This is a sandbox project to test out gemini/claude when using superpowers exten
 ## Features
 
 *   Interactive terminal UI using `tcell`.
-*   Peer-to-Peer (P2P) TCP networking for 2 players.
+*   Cross-network multiplayer via a central gRPC relay server (Cloud Run).
 *   Ship placement and battle phases.
+
+## Architecture
+
+Players communicate through a central gRPC relay server hosted on Google Cloud Run. The relay server (written in Ruby) manages game sessions and forwards messages between players via bidirectional gRPC streams. This eliminates the need for port forwarding or being on the same local network.
+
+```
+Player A (Go client) ──gRPC──► Cloud Run Relay Server ◄──gRPC── Player B (Go client)
+```
 
 ## How to Run
 
-### Host
+### Build the Game
 ```bash
-go run . host -p 8080
+go build -o battleship .
 ```
 
-### Join
-```bash
-go run . join -a 127.0.0.1:8080
+### Configure the Server URL
+
+Create a `.env` file in the project root:
 ```
+SERVER_URL=https://your-relay-server.run.app
+```
+
+Alternatively, export it in your shell:
+```bash
+export SERVER_URL=https://your-relay-server.run.app
+```
+
+> You can also pass `--server URL` to override both.
+
+### Host a Game
+```bash
+./battleship host
+```
+
+This creates a new game session and prints a game code (e.g., `XYZABC`) to share with your opponent.
+
+### Join a Game
+```bash
+./battleship join GAME_ID
+```
+
+Replace `GAME_ID` with the code provided by the host.
 
 ## Gameplay Instructions
 

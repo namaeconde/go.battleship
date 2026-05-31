@@ -4,7 +4,6 @@ package game
 import (
 	"context"
 	"fmt"
-	"net"
 	"strings"
 	"sync"
 	"time"
@@ -19,12 +18,20 @@ type UIInterface interface {
 	Draw(gs *GameState, currentShip *Ship, currentOrientation Orientation)
 }
 
+// NetworkConn is the minimal interface both the legacy TCP connection and the
+// new gRPC stream wrapper must satisfy.
+type NetworkConn interface {
+	Send(msg network.Message) error
+	Receive() (*network.Message, error)
+	Close() error
+}
+
 // GameState holds the entire state of the game.
 type GameState struct {
 	LocalPlayer  *PlayerState
 	RemotePlayer *PlayerState
 	Phase        GamePhase
-	Connection   net.Conn    // Network connection
+	Connection   NetworkConn // Network connection
 	TurnOwner    string      // Name of the player whose turn it is
 	UI           UIInterface // Reference to the UI
 
@@ -38,6 +45,7 @@ type GameState struct {
 	CancelCtx           context.Context    // Context for cancellation of goroutines
 	CancelFunc          context.CancelFunc // Function to cancel context
 	wg                  sync.WaitGroup     // WaitGroup for goroutines
+	mu                  sync.Mutex         // Protects ready/phase transition logic
 }
 
 // NewGame initializes a new GameState with two players.
@@ -120,7 +128,7 @@ func (gs *GameState) networkReader() {
 			fmt.Println("networkReader: Shutting down.")
 			return
 		default:
-			msg, err := network.Receive(gs.Connection)
+			msg, err := gs.Connection.Receive()
 			if err != nil {
 				if err.Error() == "EOF" || strings.Contains(err.Error(), "use of closed network connection") {
 					gs.UI.SetMessage("Opponent disconnected.")
@@ -149,7 +157,7 @@ func (gs *GameState) networkWriter() {
 			fmt.Println("networkWriter: Shutting down.")
 			return
 		case msg := <-gs.outgoingMsgs:
-			err := network.Send(gs.Connection, msg)
+			err := gs.Connection.Send(msg)
 			if err != nil {
 				gs.UI.SetMessage(fmt.Sprintf("Network write error: %v", err))
 				gs.UI.Draw(gs, nil, Horizontal)
@@ -204,10 +212,14 @@ func (gs *GameState) FireShot(coord Coordinate) error {
 
 // SetReady marks the local player as ready and sends a message to the opponent.
 func (gs *GameState) SetReady() {
+	gs.mu.Lock()
 	gs.LocalPlayer.IsReady = true
+	bothReady := gs.RemotePlayer.IsReady
+	gs.mu.Unlock()
+
 	gs.SendMessage(network.CmdPlacementDone)
 
-	if gs.RemotePlayer.IsReady {
+	if bothReady {
 		gs.TransitionPhase(PhaseBattle)
 	} else {
 		gs.UI.SetMessage("Waiting for opponent...")
@@ -253,22 +265,13 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 	gs.UI.Draw(gs, nil, Horizontal) // Redraw to show message immediately
 
 	switch msg.Command {
-	case network.CmdConnectRequest:
-		if gs.LocalPlayer.Name == "Host" {
-			gs.SendMessage(network.CmdConnectAck)
-			gs.TransitionPhase(PhasePlacement)
-			gs.UI.SetMessage("Opponent connected. Ready for ship placement. Press Enter when done.")
-			gs.UI.Draw(gs, nil, Horizontal)
-		}
-	case network.CmdConnectAck:
-		if gs.LocalPlayer.Name == "Joiner" {
-			gs.TransitionPhase(PhasePlacement)
-			gs.UI.SetMessage("Connected to host. Ready for ship placement. Press Enter when done.")
-			gs.UI.Draw(gs, nil, Horizontal)
-		}
 	case network.CmdPlacementDone:
+		gs.mu.Lock()
 		gs.RemotePlayer.IsReady = true
-		if gs.LocalPlayer.IsReady {
+		bothReady := gs.LocalPlayer.IsReady
+		gs.mu.Unlock()
+
+		if bothReady {
 			gs.TransitionPhase(PhaseBattle)
 		} else {
 			gs.UI.SetMessage("Opponent is ready.")
