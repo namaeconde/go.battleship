@@ -14,8 +14,7 @@ import (
 // UIInterface defines the interface for the game UI.
 // Defined here to avoid circular dependency with the ui package.
 type UIInterface interface {
-	SetMessage(msg string)
-	Draw(gs *GameState, currentShip *Ship, currentOrientation Orientation)
+	Send(event UIEvent)
 }
 
 // NetworkConn is the minimal interface both the legacy TCP connection and the
@@ -67,17 +66,14 @@ func NewGame(localPlayerName, remotePlayerName string, gameUI UIInterface) *Game
 func (gs *GameState) TransitionPhase(newPhase GamePhase) {
 	gs.Phase = newPhase
 	if newPhase == PhaseBattle {
-		// Host always fires first
 		gs.TurnOwner = "Host"
 	}
-	gs.UI.SetMessage(fmt.Sprintf("Game phase transitioned to: %v", newPhase))
-	gs.UI.Draw(gs, nil, Horizontal) // Redraw with updated phase
+	gs.UI.Send(PhaseChangedEvent{Phase: newPhase})
 }
 
 // StartGameLoop is the main game loop, integrating UI and network events.
 func (gs *GameState) StartGameLoop() {
-	gs.UI.SetMessage(fmt.Sprintf("Game loop started. Current phase: %v", gs.Phase))
-	gs.UI.Draw(gs, nil, Horizontal)
+	gs.UI.Send(MessageEvent{Text: fmt.Sprintf("Game loop started. Current phase: %v", gs.Phase)})
 
 	// Start network listener/sender goroutines
 	gs.wg.Add(2)
@@ -131,12 +127,12 @@ func (gs *GameState) networkReader() {
 			msg, err := gs.Connection.Receive()
 			if err != nil {
 				if err.Error() == "EOF" || strings.Contains(err.Error(), "use of closed network connection") {
-					gs.UI.SetMessage("Opponent disconnected.")
+					gs.UI.Send(MessageEvent{Text: "Opponent disconnected."})
 				} else {
-					gs.UI.SetMessage(fmt.Sprintf("Network read error: %v", err))
+					gs.UI.Send(MessageEvent{Text: fmt.Sprintf("Network read error: %v", err)})
 				}
-				gs.UI.Draw(gs, nil, Horizontal)
-				gs.CancelFunc() // Signal game loop to stop on network error
+				gs.UI.Send(QuitEvent{})
+				gs.CancelFunc()
 				return
 			}
 			gs.incomingMsgs <- msg
@@ -159,9 +155,9 @@ func (gs *GameState) networkWriter() {
 		case msg := <-gs.outgoingMsgs:
 			err := gs.Connection.Send(msg)
 			if err != nil {
-				gs.UI.SetMessage(fmt.Sprintf("Network write error: %v", err))
-				gs.UI.Draw(gs, nil, Horizontal)
-				gs.CancelFunc() // Signal game loop to stop on network error
+				gs.UI.Send(MessageEvent{Text: fmt.Sprintf("Network write error: %v", err)})
+				gs.UI.Send(QuitEvent{})
+				gs.CancelFunc()
 				return
 			}
 		}
@@ -203,10 +199,9 @@ func (gs *GameState) FireShot(coord Coordinate) error {
 		return fmt.Errorf("coordinate already targeted")
 	}
 	gs.LastShot = &coord
-	gs.TurnOwner = "" // Clear while waiting for response
+	gs.TurnOwner = ""
 	gs.SendMessage(network.CmdShot, "coord", coord.String())
-	gs.UI.SetMessage(fmt.Sprintf("Firing at %s...", coord.String()))
-	gs.UI.Draw(gs, nil, Horizontal)
+	gs.UI.Send(MessageEvent{Text: fmt.Sprintf("Firing at %s...", coord.String())})
 	return nil
 }
 
@@ -222,8 +217,7 @@ func (gs *GameState) SetReady() {
 	if bothReady {
 		gs.TransitionPhase(PhaseBattle)
 	} else {
-		gs.UI.SetMessage("Waiting for opponent...")
-		gs.UI.Draw(gs, nil, Horizontal)
+		gs.UI.Send(MessageEvent{Text: "Waiting for opponent..."})
 	}
 }
 
@@ -238,8 +232,7 @@ func (gs *GameState) RequestReplay() {
 	if gs.OpponentWantsReplay {
 		gs.doReset()
 	} else {
-		gs.UI.SetMessage("Replay requested. Waiting for opponent to agree...")
-		gs.UI.Draw(gs, nil, Horizontal)
+		gs.UI.Send(MessageEvent{Text: "Replay requested. Waiting for opponent to agree..."})
 	}
 }
 
@@ -255,14 +248,13 @@ func (gs *GameState) doReset() {
 	gs.Winner = ""
 	gs.WaitingReplay = false
 	gs.OpponentWantsReplay = false
-	gs.UI.SetMessage("New game! Place your ships.")
-	gs.UI.Draw(gs, nil, Horizontal)
+	gs.UI.Send(PhaseChangedEvent{Phase: PhasePlacement})
+	gs.UI.Send(MessageEvent{Text: "New game! Place your ships."})
 }
 
 // handleIncomingMessage processes a received network message.
 func (gs *GameState) handleIncomingMessage(msg *network.Message) {
-	gs.UI.SetMessage(fmt.Sprintf("Received: %v %v", msg.Command, msg.Args))
-	gs.UI.Draw(gs, nil, Horizontal) // Redraw to show message immediately
+	gs.UI.Send(MessageEvent{Text: fmt.Sprintf("Received: %v %v", msg.Command, msg.Args)})
 
 	switch msg.Command {
 	case network.CmdPlacementDone:
@@ -274,20 +266,18 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 		if bothReady {
 			gs.TransitionPhase(PhaseBattle)
 		} else {
-			gs.UI.SetMessage("Opponent is ready.")
-			gs.UI.Draw(gs, nil, Horizontal)
+			gs.UI.Send(MessageEvent{Text: "Opponent is ready."})
 		}
+
 	case network.CmdShot:
 		if gs.Phase != PhaseBattle {
-			gs.UI.SetMessage("Shot received outside battle phase.")
-			gs.UI.Draw(gs, nil, Horizontal)
+			gs.UI.Send(MessageEvent{Text: "Shot received outside battle phase."})
 			return
 		}
 		coordStr := msg.Args["coord"]
 		coord, err := ParseCoordinate(coordStr)
 		if err != nil {
-			gs.UI.SetMessage(fmt.Sprintf("Invalid coordinate: %v", coordStr))
-			gs.UI.Draw(gs, nil, Horizontal)
+			gs.UI.Send(MessageEvent{Text: fmt.Sprintf("Invalid coordinate: %v", coordStr)})
 			return
 		}
 
@@ -312,46 +302,45 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 			args = append(args, "shipType", shipType.String())
 		}
 		gs.SendMessage(network.CmdShotResult, args...)
-		// Detect if all local ships are sunk (we lost)
+
+		gs.UI.Send(ShotResultEvent{Coord: coord, Result: result, ShipType: shipType.String(), Board: "fleet"})
+
 		if result == "sunk" && gs.LocalPlayer.ShipsRemaining == 0 {
 			gs.Winner = gs.RemotePlayer.Name
 			gs.TransitionPhase(PhaseGameOver)
+			gs.UI.Send(GameOverEvent{Winner: gs.Winner})
 			return
 		}
-		// Opponent just fired — now it is the local player's turn
 		gs.TurnOwner = gs.LocalPlayer.Name
-		gs.UI.SetMessage(fmt.Sprintf("Your turn! Opponent fired at %s (%s). Fire back.", coordStr, result))
-		gs.UI.Draw(gs, nil, Horizontal)
+		gs.UI.Send(MessageEvent{Text: fmt.Sprintf("Your turn! Opponent fired at %s (%s). Fire back.", coordStr, result)})
+
 	case network.CmdShotResult:
 		if gs.Phase != PhaseBattle {
 			return
 		}
-
 		result := msg.Args["result"]
 		coord := *gs.LastShot
 
-		// Update TrackingBoard and account for sunk ships
 		switch result {
 		case "hit":
 			gs.RemotePlayer.TrackingBoard.Grid[coord.Row][coord.Col] = Hit
-			gs.UI.SetMessage(fmt.Sprintf("Hit at %s! It's now opponent's turn.", coord.String()))
 		case "miss":
 			gs.RemotePlayer.TrackingBoard.Grid[coord.Row][coord.Col] = Miss
-			gs.UI.SetMessage(fmt.Sprintf("Miss at %s. Opponent's turn.", coord.String()))
 		case "sunk":
 			gs.RemotePlayer.TrackingBoard.Grid[coord.Row][coord.Col] = SunkShip
 			gs.RemotePlayer.ShipsRemaining--
-			if gs.RemotePlayer.ShipsRemaining <= 0 {
-				gs.Winner = gs.LocalPlayer.Name
-				gs.TransitionPhase(PhaseGameOver)
-				gs.UI.Draw(gs, nil, Horizontal)
-				return
-			}
-			gs.UI.SetMessage(fmt.Sprintf("Sunk %s at %s! Opponent's turn.", msg.Args["shipType"], coord.String()))
 		}
-		// Local player just received their shot result — now it is opponent's turn
+
+		gs.UI.Send(ShotResultEvent{Coord: coord, Result: result, ShipType: msg.Args["shipType"], Board: "tracking"})
+
+		if result == "sunk" && gs.RemotePlayer.ShipsRemaining <= 0 {
+			gs.Winner = gs.LocalPlayer.Name
+			gs.TransitionPhase(PhaseGameOver)
+			gs.UI.Send(GameOverEvent{Winner: gs.Winner})
+			return
+		}
 		gs.TurnOwner = gs.RemotePlayer.Name
-		gs.UI.Draw(gs, nil, Horizontal)
+
 	case network.CmdReplayRequest:
 		if gs.Phase != PhaseGameOver {
 			return
@@ -360,16 +349,15 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 		if gs.WaitingReplay {
 			gs.doReset()
 		} else {
-			gs.UI.SetMessage("Opponent wants to replay! Press R to agree or Q to quit.")
-			gs.UI.Draw(gs, nil, Horizontal)
+			gs.UI.Send(MessageEvent{Text: "Opponent wants to replay! Press R to agree or Q to quit."})
 		}
+
 	case network.CmdQuit:
-		gs.UI.SetMessage("Opponent quit the game.")
-		gs.UI.Draw(gs, nil, Horizontal)
-		gs.CancelFunc()
+		gs.UI.Send(MessageEvent{Text: "Opponent quit the game."})
+		gs.UI.Send(QuitEvent{})
+
 	default:
-		gs.UI.SetMessage(fmt.Sprintf("Unhandled command: %s", msg.Command))
-		gs.UI.Draw(gs, nil, Horizontal)
+		gs.UI.Send(MessageEvent{Text: fmt.Sprintf("Unhandled command: %s", msg.Command)})
 	}
 }
 

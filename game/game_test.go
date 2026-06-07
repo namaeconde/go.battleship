@@ -10,15 +10,11 @@ import (
 
 // Mock UI for testing GameState without actual tcell screen.
 type MockUI struct {
-	Messages  []string
-	DrawCalls int
+	Events []UIEvent
 }
 
-func (m *MockUI) SetMessage(msg string) {
-	m.Messages = append(m.Messages, msg)
-}
-func (m *MockUI) Draw(gs *GameState, currentShip *Ship, currentOrientation Orientation) {
-	m.DrawCalls++
+func (m *MockUI) Send(e UIEvent) {
+	m.Events = append(m.Events, e)
 }
 
 // TestNewGame initializes a new game state.
@@ -121,11 +117,15 @@ func TestLegacyConnectMessagesAreIgnored(t *testing.T) {
 			default:
 			}
 
-			if len(mockUI.Messages) == 0 {
-				t.Fatal("expected UI message for ignored legacy command")
+			if len(mockUI.Events) == 0 {
+				t.Fatal("expected UI event for ignored legacy command")
 			}
-			if !strings.Contains(mockUI.Messages[len(mockUI.Messages)-1], "Unhandled command") {
-				t.Fatalf("expected unhandled command message, got %q", mockUI.Messages[len(mockUI.Messages)-1])
+			msgEvent, ok := mockUI.Events[len(mockUI.Events)-1].(MessageEvent)
+			if !ok {
+				t.Fatalf("expected MessageEvent as last event, got %T", mockUI.Events[len(mockUI.Events)-1])
+			}
+			if !strings.Contains(msgEvent.Text, "Unhandled command") {
+				t.Fatalf("expected unhandled command message, got %q", msgEvent.Text)
 			}
 		})
 	}
