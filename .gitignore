@@ -33,3 +33,7 @@ bin/
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Superpowers
+.superpowers/
+docs
