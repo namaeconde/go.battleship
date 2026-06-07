@@ -216,6 +216,7 @@ func (gs *GameState) SetReady() {
 
 	if bothReady {
 		gs.TransitionPhase(PhaseBattle)
+		gs.UI.Send(MessageEvent{Text: "Both players ready! Starting battle phase."})
 	} else {
 		gs.UI.Send(MessageEvent{Text: "Waiting for opponent..."})
 	}
@@ -254,8 +255,6 @@ func (gs *GameState) doReset() {
 
 // handleIncomingMessage processes a received network message.
 func (gs *GameState) handleIncomingMessage(msg *network.Message) {
-	gs.UI.Send(MessageEvent{Text: fmt.Sprintf("Received: %v %v", msg.Command, msg.Args)})
-
 	switch msg.Command {
 	case network.CmdPlacementDone:
 		gs.mu.Lock()
@@ -265,6 +264,7 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 
 		if bothReady {
 			gs.TransitionPhase(PhaseBattle)
+			gs.UI.Send(MessageEvent{Text: "Both players ready! Starting battle phase."})
 		} else {
 			gs.UI.Send(MessageEvent{Text: "Opponent is ready."})
 		}
@@ -273,7 +273,10 @@ func (gs *GameState) handleIncomingMessage(msg *network.Message) {
 		if gs.Phase != PhaseBattle {
 			gs.UI.Send(MessageEvent{Text: "Shot received outside battle phase."})
 			return
+		} else {
+			gs.UI.Send(MessageEvent{Text: "Fire in the hole!"})
 		}
+
 		coordStr := msg.Args["coord"]
 		coord, err := ParseCoordinate(coordStr)
 		if err != nil {

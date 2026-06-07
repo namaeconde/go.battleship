@@ -19,7 +19,7 @@ type PlayerState struct {
 func NewPlayer(name string) *PlayerState {
 	ships := make([]Ship, len(DefaultShips))
 	copy(ships, DefaultShips)
-	
+
 	// Ensure Hits slice is initialized for each ship
 	for i := range ships {
 		ships[i].Hits = make([]bool, ships[i].Size)
@@ -63,7 +63,7 @@ func (p *PlayerState) RecordHit(coord Coordinate) (CellState, ShipType, error) {
 		for j, shipCoord := range ship.Coordinates {
 			if shipCoord == coord {
 				ship.Hits[j] = true
-				
+
 				// Check if sunk
 				isSunk := true
 				for _, h := range ship.Hits {
@@ -85,6 +85,18 @@ func (p *PlayerState) RecordHit(coord Coordinate) (CellState, ShipType, error) {
 
 	// This should not be reachable if Board.ApplyShot returned Hit
 	return Hit, -1, fmt.Errorf("ship not found at coordinate %v", coord)
+}
+
+// GetShipAtCoord returns a pointer to the placed ship occupying the given coordinate, or nil if none.
+func (p *PlayerState) GetShipAtCoord(coord Coordinate) *Ship {
+	for i := range p.Ships {
+		for _, c := range p.Ships[i].Coordinates {
+			if c == coord {
+				return &p.Ships[i]
+			}
+		}
+	}
+	return nil
 }
 
 // RemoveShip clears a ship's coordinates from the board and the ship's own state.

@@ -13,7 +13,7 @@ import (
 // animState tracks a single in-progress hit/miss animation.
 type animState struct {
 	active bool
-	frame  int    // 0–3; frame 3 is the "settled" state
+	frame  int // 0–3; frame 3 is the "settled" state
 	coord  game.Coordinate
 	board  string // "fleet" (incoming) | "tracking" (outgoing)
 	result string // "hit", "miss", or "sunk"
@@ -61,9 +61,12 @@ func (m *Model) SetProgram(p *tea.Program) {
 }
 
 // Send implements game.UIInterface — forwards UIEvents into the bubbletea event loop.
+// Uses a goroutine to avoid deadlocking when called from within Update() (e.g. via
+// SetReady, FireShot, RequestReplay). Bubbletea's p.Send blocks on an unbuffered
+// channel that the event loop only reads after Update() returns.
 func (m *Model) Send(event game.UIEvent) {
 	if m.program != nil {
-		m.program.Send(event)
+		go m.program.Send(event)
 	}
 }
 
@@ -177,6 +180,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					m.currentShip = nextShip(m.gs.LocalPlayer.Ships, m.currentShip.Type)
 				}
 			} else {
+				m.message = "Ready! Waiting for opponent..."
 				m.gs.SetReady()
 			}
 
@@ -192,24 +196,29 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case tea.KeySpace:
+		switch m.gs.Phase {
+		case game.PhasePlacement:
+			ship := m.gs.LocalPlayer.GetShipAtCoord(m.cursor)
+			if ship != nil {
+				shipType := ship.Type
+				if err := m.gs.RemoveShip(shipType); err != nil {
+					m.message = fmt.Sprintf("Cannot remove: %v", err)
+				} else {
+					m.currentShip = m.gs.LocalPlayer.GetShipByType(shipType)
+					m.message = fmt.Sprintf("%s removed. Re-place it.", shipType)
+				}
+			} else {
+				m.message = "No ship at cursor. Move cursor to a placed ship to remove it."
+			}
+		case game.PhaseBattle:
+			target := game.Coordinate{Row: m.cursor.Row, Col: m.cursor.Col}
+			m.targetCoord = &target
+			m.message = fmt.Sprintf("Targeting %s — press Enter to fire.", target.String())
+		}
+
 	case tea.KeyRunes:
 		switch msg.Runes[0] {
-		case ' ':
-			switch m.gs.Phase {
-			case game.PhasePlacement:
-				if m.currentShip != nil {
-					if err := m.gs.RemoveShip(m.currentShip.Type); err != nil {
-						m.message = fmt.Sprintf("Cannot remove: %v", err)
-					} else {
-						m.message = "Ship removed."
-					}
-				}
-			case game.PhaseBattle:
-				target := game.Coordinate{Row: m.cursor.Row, Col: m.cursor.Col}
-				m.targetCoord = &target
-				m.message = fmt.Sprintf("Targeting %s — press Enter to fire.", target.String())
-			}
-
 		case 'r', 'R':
 			if m.gs.Phase == game.PhaseGameOver {
 				m.gs.RequestReplay()
