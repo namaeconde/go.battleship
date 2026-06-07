@@ -181,3 +181,37 @@ func ParseShipType(s string) ShipType {
 		return -1
 	}
 }
+
+// UIEvent is the interface all game→UI events implement.
+type UIEvent interface{ uiEvent() }
+
+// MessageEvent carries a status/info message to display in the UI.
+type MessageEvent struct{ Text string }
+
+// PhaseChangedEvent notifies the UI of a game phase transition.
+type PhaseChangedEvent struct{ Phase GamePhase }
+
+// ShotResultEvent notifies the UI of a shot result to animate.
+// Board is "fleet" for incoming opponent shots, "tracking" for outgoing shots.
+type ShotResultEvent struct {
+	Coord    Coordinate
+	Result   string // "hit", "miss", or "sunk"
+	ShipType string // ship name when Result == "sunk", empty otherwise
+	Board    string // "fleet" | "tracking"
+}
+
+// GameOverEvent notifies the UI that the game has ended.
+type GameOverEvent struct{ Winner string }
+
+// ReplayEvent notifies the UI that both players agreed to replay.
+type ReplayEvent struct{}
+
+// QuitEvent tells the UI to shut down cleanly.
+type QuitEvent struct{}
+
+func (MessageEvent) uiEvent()      {}
+func (PhaseChangedEvent) uiEvent() {}
+func (ShotResultEvent) uiEvent()   {}
+func (GameOverEvent) uiEvent()     {}
+func (ReplayEvent) uiEvent()       {}
+func (QuitEvent) uiEvent()         {}
