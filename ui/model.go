@@ -192,8 +192,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case tea.KeyRune:
-		switch msg.Rune {
+	case tea.KeyRunes:
+		switch msg.Runes[0] {
 		case ' ':
 			switch m.gs.Phase {
 			case game.PhasePlacement:
